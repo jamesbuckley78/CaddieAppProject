@@ -1,0 +1,29 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: caddie-backend
+  datasource:
+    # Values come from environment variables; the defaults match .env.example
+    url: ${DB_URL:jdbc:mysql://localhost:3306/caddie}
+    username: ${DB_USERNAME:caddie}
+    password: ${DB_PASSWORD:change-me}
+  jpa:
+    # Flyway owns the schema. Hibernate only checks the entities match it.
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: Europe/Dublin
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+app:
+  jwt:
+    secret: ${JWT_SECRET:dev-only-secret-change-me-please-at-least-32-chars}
+    expiry-days: 90   # caddies "log in once and stay logged in"
+  timezone: Europe/Dublin
