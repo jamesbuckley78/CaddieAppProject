@@ -49,13 +49,13 @@ The club runs its caddie order from a manual list. People skip, nobody knows exa
 | audit_log | admin_id, action, before, after, timestamp |
 
 ## Open questions - ask the caddie master (record answers in docs/RULES.md)
-1. Do priority caddies always go before everyone else, or only within their grade?
-2. After a loop, does a caddie go to the bottom of today's list, or is their place based on bags carried (today or season)?
-3. Does a double count as one turn or two?
-4. Can a double caddie take a single if no singles are free? Are juniors singles only?
-5. What happens on a no-reply: lose place, drop X places, or skip once?
-6. Is an admin's manual move a one-off or permanent?
-7. Does the club's review system have an API we could link to?
+1. Do priority caddies always go before everyone else, or only within their grade? Priority first, then everyone else(singles and doubles that are non priority go after)
+2. After a loop, does a caddie go to the bottom of today's list, or is their place based on bags carried (today or season)? Their place is based on the bag, so a single is one, a double is 2
+3. Does a double count as one turn or two? 2
+4. Can a double caddie take a single if no singles are free? Are juniors singles only? Doubles can but rarely and juniors can take singles and doubles
+5. What happens on a no-reply: lose place, drop X places, or skip once? if a person is not there, they go up the list as they did not take a bag
+6. Is an admin's manual move a one-off or permanent? Admin can move caddies at their dsicretion
+7. Does the club's review system have an API we could link to? unknown
 
 ## Build phases
 1. **MVP:** docker-compose MySQL, Spring Boot skeleton, login (JWT), admin creates caddies, "I'm here" status button, QueueService with tests, singles/doubles board, assign bag, push notification.
