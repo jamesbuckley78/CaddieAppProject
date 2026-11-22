@@ -35,6 +35,10 @@ app:
     latitude: 53.0
     longitude: -6.0
     radius-meters: 400
+  # The club list's order, day columns and "bags today" all update once a day at this time
+  # (queue/ClubListRecalculation). Bags entered after it count from the next day's update.
+  club-list:
+    daily-update-time: "16:00"
   # First admin, created on start-up only if the database has no admin yet.
   # They must choose a new password on first login. Override all three in production.
   bootstrap-admin:

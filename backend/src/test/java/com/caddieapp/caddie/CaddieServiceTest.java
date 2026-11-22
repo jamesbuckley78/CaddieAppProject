@@ -79,11 +79,17 @@ class CaddieServiceTest {
         assertThat(encoder.matches(result.setupCode(), saved.getPasswordHash())).isTrue();
     }
 
+    /** A list of 120: 50 priority, 62 other adults, 8 juniors (113-120). */
+    private void listOf120() {
+        when(caddies.countByPriorityTrue()).thenReturn(50L);
+        when(caddies.countByGradeNot(Grade.JUNIOR)).thenReturn(112L);
+        when(caddies.findMaxListPosition()).thenReturn(120);
+    }
+
     @Test
     void newCaddieGoesToTopOfNonPriorityGroupAndOthersShiftDown() {
         saveAssignsIds();
-        when(caddies.countByPriorityTrue()).thenReturn(50L);
-        when(caddies.findMaxListPosition()).thenReturn(120);
+        listOf120();
 
         CaddieWithSetupCode result = service.create(request("0871234567", Grade.SINGLE, false, null));
 
@@ -92,16 +98,37 @@ class CaddieServiceTest {
     }
 
     @Test
-    void paperListSetupAddsAtTheBottomWithoutShifting() {
+    void paperListAdultGoesAboveTheJuniors() {
         saveAssignsIds();
-        when(caddies.countByPriorityTrue()).thenReturn(50L);
-        when(caddies.findMaxListPosition()).thenReturn(120);
+        listOf120();
 
         CaddieWithSetupCode result = service.create(
             request("0871234567", Grade.SINGLE, false, Placement.BOTTOM_OF_GROUP));
 
+        assertThat(result.caddie().listPosition()).isEqualTo(113);
+        verify(caddies).shiftDownFrom(113);
+    }
+
+    @Test
+    void paperListJuniorAddsAtTheVeryBottomWithoutShifting() {
+        saveAssignsIds();
+        listOf120();
+
+        CaddieWithSetupCode result = service.create(
+            request("0871234567", Grade.JUNIOR, false, Placement.BOTTOM_OF_GROUP));
+
         assertThat(result.caddie().listPosition()).isEqualTo(121);
         verify(caddies, never()).shiftDownFrom(anyInt());
+    }
+
+    @Test
+    void newJuniorGoesToTopOfJuniorGroup() {
+        saveAssignsIds();
+        listOf120();
+
+        CaddieWithSetupCode result = service.create(request("0871234567", Grade.JUNIOR, false, null));
+
+        assertThat(result.caddie().listPosition()).isEqualTo(113);
     }
 
     @Test

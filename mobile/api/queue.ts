@@ -1,4 +1,4 @@
-import type { Board, ClubListRow, MyDay, QueueStatus } from '@/types';
+import type { Board, ClubList, MyDay, QueueStatus } from '@/types';
 
 import { api } from './client';
 
@@ -21,9 +21,9 @@ export function checkOut() {
   return api.post<MyDay>('/availability/check-out');
 }
 
-// Everyone: the club list (changes once a night).
+// Everyone: the club list table (order and bag figures update together daily at 4pm).
 export function fetchClubList() {
-  return api.get<ClubListRow[]>('/queue/club-list');
+  return api.get<ClubList>('/queue/club-list');
 }
 
 // Admin: everyone checked in today, in line order.

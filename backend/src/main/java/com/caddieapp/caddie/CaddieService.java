@@ -54,8 +54,8 @@ public class CaddieService {
         // admin is copying the paper list in order (bottom of group).
         Placement placement = request.placement() == null ? Placement.TOP_OF_GROUP : request.placement();
         int lastPosition = caddies.findMaxListPosition();
-        int position = queueService.newCaddiePosition(request.priority(), placement,
-            caddies.countByPriorityTrue(), lastPosition);
+        int position = queueService.newCaddiePosition(request.priority(), request.grade() == Grade.JUNIOR,
+            placement, caddies.countByPriorityTrue(), caddies.countByGradeNot(Grade.JUNIOR), lastPosition);
         if (position <= lastPosition) {
             caddies.shiftDownFrom(position);
         }

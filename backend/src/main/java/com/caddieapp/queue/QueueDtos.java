@@ -23,18 +23,42 @@ public final class QueueDtos {
         Integer lineNumber,
         int bagsThisWeek,
         int clubPosition,
-        int totalBagsToday,
         boolean locationRequired) {
     }
 
-    /** One row of the club list - everyone can see this. */
+    /**
+     * The club list as a table - everyone can see this. Order and figures both come from the
+     * last daily update at `updatesAt` (4pm), which counted bags up to `countsUpTo`.
+     *
+     * @param totalBags all bags carried at the club on `countsUpTo`
+     * @param days      Monday to Friday of the week being shown, one per day column
+     * @param dayTotals the whole club's bags on each of `days` (the Total row)
+     * @param weekTotal the whole club's bags this week so far, weekend included
+     */
+    public record ClubListResponse(
+        LocalDate countsUpTo,
+        String updatesAt,
+        int totalBags,
+        List<LocalDate> days,
+        List<Integer> dayTotals,
+        int weekTotal,
+        List<ClubListRow> rows) {
+    }
+
+    /**
+     * One row of the club list.
+     *
+     * @param bagsByDay bags on each of `days` (Mon-Fri), same order
+     * @param weekTotal all bags this week so far, weekend included - this is what orders the list
+     */
     public record ClubListRow(
         int position,
         long caddieId,
         String name,
         Grade grade,
         boolean priority,
-        int bagsThisWeek) {
+        List<Integer> bagsByDay,
+        int weekTotal) {
     }
 
     /** One checked-in caddie on the admin board, already in today's order. */

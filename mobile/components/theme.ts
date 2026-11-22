@@ -9,4 +9,13 @@ export const colors = {
   primaryText: '#ffffff',
   danger: '#b3261e',
   highlight: '#fff6d6',
+  stripe: '#f0f2ee', // every other table row
+};
+
+/** Name tags on the club list: P = priority, S = single, D = double, J = junior. */
+export const tagColors = {
+  P: '#1f6f43',
+  S: '#1d5fa8',
+  D: '#b25a00',
+  J: '#6b6b6b',
 };
