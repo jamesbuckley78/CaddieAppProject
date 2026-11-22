@@ -2,7 +2,6 @@ package com.caddieapp.queue;
 
 import java.time.Clock;
 import java.time.LocalDate;
-import java.util.List;
 import java.util.Map;
 
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -12,7 +11,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.caddieapp.auth.AuthUser;
 import com.caddieapp.queue.QueueDtos.BoardResponse;
-import com.caddieapp.queue.QueueDtos.ClubListRow;
+import com.caddieapp.queue.QueueDtos.ClubListResponse;
 import com.caddieapp.queue.QueueDtos.MyDayResponse;
 
 @RestController
@@ -34,9 +33,9 @@ public class QueueController {
         return queries.myDay(user.id());
     }
 
-    /** Caddies and admins: the club list (changes once a night). */
+    /** Caddies and admins: the club list table (order and figures update daily at 4pm). */
     @GetMapping("/api/queue/club-list")
-    public List<ClubListRow> clubList() {
+    public ClubListResponse clubList() {
         return queries.clubList();
     }
 
@@ -47,8 +46,8 @@ public class QueueController {
     }
 
     /**
-     * Admin: re-run the club list order now, using this week's bags up to today. Normally the
-     * midnight job does this; this is for testing and for fixing the list after setup.
+     * Admin: run the daily club list update now, using this week's bags up to today. Normally
+     * the 4pm job does this; this is for testing and for fixing the list after setup.
      */
     @PostMapping("/api/admin/club-list/recalculate")
     public Map<String, Integer> recalculate() {

@@ -29,10 +29,10 @@ Status: **planned** means not built yet. Update this table as endpoints are adde
 | POST | `/availability/check-in` | caddie | "I'm here". Body `{latitude, longitude}`; 400 without a position, 403 outside the club area (`app.check-in`). Returns my day | built |
 | POST | `/availability/status` | caddie | `{status: AVAILABLE \| FOOD \| BACK_LATER, backInMinutes?}` (5-240, needed for BACK_LATER). Keeps their place. 409 if out on course | built |
 | POST | `/availability/check-out` | caddie | "Finished for today" - leaves today's line | built |
-| GET | `/queue/me` | caddie | My day: checked in?, status, `backAt`, `lineNumber` ("5th in line"), bags this week, club position, today's club total | built |
-| GET | `/queue/club-list` | both | The club list (position, name, grade, priority, bags this week) | built |
-| GET | `/admin/board` | admin | Everyone checked in today, in line order, with status and line number (null = out on course) | built |
-| POST | `/admin/club-list/recalculate` | admin | Re-order the club list now with this week's bags (normally the midnight job does it) | built |
+| GET | `/queue/me` | caddie | My day: checked in?, status, `backAt`, `lineNumber` ("5th in line"), bags this week, club list number | built |
+| GET | `/queue/club-list` | both | The club list table: `{countsUpTo, updatesAt, totalBags, days (Mon-Fri), dayTotals, weekTotal, rows: [{position, name, grade, priority, bagsByDay, weekTotal}]}`. Order and figures update together daily at 4pm (`app.club-list.daily-update-time`) | built |
+| GET | `/admin/board` | admin | Everyone checked in today, in line order, with status and line number (null = out on course). `totalBagsToday` is live | built |
+| POST | `/admin/club-list/recalculate` | admin | Run the daily club list update now with this week's bags (normally the 4pm job does it) | built |
 | POST | `/loops` | admin | Assign a bag to a caddie (row-locked transaction) | planned |
 | PATCH | `/loops/{id}` | admin | Change the bag type | planned |
 | POST | `/admin/queue/{caddieId}/move` | admin | Manual move, holds until the caddie's next bag (audit logged) | planned |

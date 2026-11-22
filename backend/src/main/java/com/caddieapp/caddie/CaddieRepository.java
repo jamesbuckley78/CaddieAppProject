@@ -8,6 +8,8 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import com.caddieapp.common.Enums.Grade;
+
 public interface CaddieRepository extends JpaRepository<Caddie, Long> {
 
     /** The club list: all caddies with their user loaded in the same query, top first. */
@@ -17,6 +19,9 @@ public interface CaddieRepository extends JpaRepository<Caddie, Long> {
     Optional<Caddie> findByUserId(Long userId);
 
     long countByPriorityTrue();
+
+    /** e.g. countByGradeNot(JUNIOR) = how many adults. */
+    long countByGradeNot(Grade grade);
 
     @Query("select coalesce(max(c.listPosition), 0) from Caddie c")
     int findMaxListPosition();

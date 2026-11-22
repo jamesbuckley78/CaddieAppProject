@@ -64,8 +64,18 @@ export interface MyDay {
   lineNumber: number | null; // "You're 5th in line"; null if not checked in or out on course
   bagsThisWeek: number;
   clubPosition: number;
-  totalBagsToday: number;
   locationRequired: boolean;
+}
+
+/** Order and figures both come from the daily update at `updatesAt` ("16:00"). */
+export interface ClubList {
+  countsUpTo: string; // a date, e.g. "2026-11-25"
+  updatesAt: string;
+  totalBags: number; // whole club on countsUpTo
+  days: string[]; // Monday..Friday of the week shown
+  dayTotals: number[]; // whole club on each of `days` - the Total row
+  weekTotal: number; // whole club this week, weekend included
+  rows: ClubListRow[];
 }
 
 export interface ClubListRow {
@@ -74,7 +84,8 @@ export interface ClubListRow {
   name: string;
   grade: Grade;
   priority: boolean;
-  bagsThisWeek: number;
+  bagsByDay: number[]; // one per entry in ClubList.days
+  weekTotal: number; // includes the weekend - this is what orders the list
 }
 
 export interface BoardEntry {

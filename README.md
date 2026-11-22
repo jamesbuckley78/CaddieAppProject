@@ -42,6 +42,17 @@ Database changes go in `backend/src/main/resources/db/migration/` as new `V2__..
 - Forgot a password? Admin taps **New code** next to the caddie.
 - Caddies tap **I'm here** on the Today tab. The admin sees them on the **Board** tab; caddies see their own number, today's bag total and the **Club list** tab.
 
+## Demo data (local testing only)
+40 made-up caddies (phone numbers starting 0899) with bags this week and a mix of statuses today, so the board and club list have something to show. Run from the project folder in PowerShell:
+```bash
+Get-Content scripts\demo-data.sql | docker exec -i caddie-mysql mysql -ucaddie -pchange-me caddie
+```
+Running it again refreshes it for the current week. To remove it:
+```bash
+Get-Content scripts\demo-data-remove.sql | docker exec -i caddie-mysql mysql -ucaddie -pchange-me caddie
+```
+Demo caddies can't log in. Never run this against the real club database.
+
 ## GPS check-in area
 "I'm here" only works within a circle around the club, set in `backend/src/main/resources/application.yml` under `app.check-in` (not changeable from the app):
 1. In Google Maps, right-click the caddie shack and click the coordinates to copy them.

@@ -112,9 +112,8 @@ export default function CaddieHome() {
       <ErrorText message={error} />
 
       <View style={styles.stats}>
-        <Stat value={day.totalBagsToday} label="bags today (whole club)" />
+        <Stat value={day.clubPosition} label="your number on the club list" />
         <Stat value={day.bagsThisWeek} label="your bags this week" />
-        <Stat value={ordinal(day.clubPosition)} label="on the club list" />
       </View>
     </Screen>
   );

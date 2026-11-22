@@ -2,6 +2,8 @@ package com.caddieapp.queue;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.temporal.TemporalAdjusters;
 import java.util.Collection;
 import java.util.Comparator;
@@ -24,23 +26,27 @@ public class QueueService {
     /**
      * One caddie as far as ordering is concerned.
      *
+     * @param junior   junior grade - they go after every adult in today's line
      * @param bags     bags carried this week (a double counts as 2)
      * @param position tie-breaker: the previous club list position
      */
-    public record Candidate(long caddieId, boolean priority, int bags, int position) {
+    public record Candidate(long caddieId, boolean priority, boolean junior, int bags, int position) {
     }
 
     /**
-     * Priority caddies first, then fewest bags, then the previous order. The caddie id is only
-     * there so two caddies never compare as equal (positions should already be unique).
+     * Three groups, in this order: priority caddies, other adults, juniors (juniors are never
+     * priority). Within a group: fewest bags, then the previous order. So juniors stay together
+     * at the bottom and only move around each other. The caddie id is only there so two
+     * caddies never compare as equal (positions should already be unique).
      */
     static final Comparator<Candidate> ORDER = Comparator
-        .comparing((Candidate c) -> !c.priority()) // false sorts before true, so priority first
+        .comparing(Candidate::junior) // false (adult) sorts before true (junior)
+        .thenComparing((Candidate c) -> !c.priority()) // then priority before non-priority
         .thenComparingInt(Candidate::bags)
         .thenComparingInt(Candidate::position)
         .thenComparingLong(Candidate::caddieId);
 
-    /** Nightly club list: everyone, in their new order. Position 1 is index 0. */
+    /** Daily club list: everyone, in their new order. Position 1 is index 0. */
     public List<Candidate> clubList(Collection<Candidate> allCaddies) {
         return allCaddies.stream().sorted(ORDER).toList();
     }
@@ -69,18 +75,35 @@ public class QueueService {
     }
 
     /**
-     * Club list position for a caddie being added. Priority caddies always occupy positions
-     * 1..priorityCount, so the "top of the group" for non-priority is priorityCount + 1.
+     * Club list position for a caddie being added, at the top or bottom of their group. The
+     * groups always sit in order: priority (1..priorityCount), other adults (..adultCount),
+     * juniors (..lastPosition).
      *
      * @param priorityCount how many priority caddies exist already
+     * @param adultCount    how many non-junior caddies exist already (priority included)
      * @param lastPosition  the current bottom position (0 if the list is empty)
      */
-    public int newCaddiePosition(boolean priority, Placement placement, long priorityCount, int lastPosition) {
-        int endOfPriorityGroup = (int) priorityCount + 1;
-        if (placement == Placement.BOTTOM_OF_GROUP) {
-            return priority ? endOfPriorityGroup : lastPosition + 1;
+    public int newCaddiePosition(boolean priority, boolean junior, Placement placement,
+                                 long priorityCount, long adultCount, int lastPosition) {
+        int topOfAdults = (int) priorityCount + 1;
+        int topOfJuniors = (int) adultCount + 1;
+        boolean bottom = placement == Placement.BOTTOM_OF_GROUP;
+        if (junior) {
+            return bottom ? lastPosition + 1 : topOfJuniors;
         }
-        return priority ? 1 : endOfPriorityGroup;
+        if (priority) {
+            return bottom ? topOfAdults : 1;
+        }
+        return bottom ? topOfJuniors : topOfAdults;
+    }
+
+    /**
+     * The club list updates once a day at `updateTime` (4pm): before then it shows up to
+     * yesterday, from then on it includes today (docs/RULES.md, "Club list screen").
+     */
+    public static LocalDate clubListCountsUpTo(LocalDateTime now, LocalTime updateTime) {
+        LocalDate today = now.toLocalDate();
+        return now.toLocalTime().isBefore(updateTime) ? today.minusDays(1) : today;
     }
 
     /** Bag counts run Monday to Sunday (docs/RULES.md). */
