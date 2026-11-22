@@ -12,6 +12,14 @@ export function setAuthToken(token: string | null) {
   authToken = token;
 }
 
+// Called when the server says the login is no longer valid (expired, or cancelled by a
+// password change). hooks/useAuth.tsx sets it to log out, which sends the user to /login.
+let onLoggedOut: (() => void) | null = null;
+
+export function setOnLoggedOut(handler: (() => void) | null) {
+  onLoggedOut = handler;
+}
+
 // Our own error type, so screens can check `error.status === 401` etc.
 // `public readonly status` in the constructor declares and sets a field in one go.
 export class ApiError extends Error {
@@ -48,6 +56,10 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     // not JSON (e.g. an HTML error page) - leave data as null
   }
 
+  if (res.status === 401 && authToken && path !== '/auth/login') {
+    onLoggedOut?.();
+    throw new ApiError(401, 'Your login has expired - please log in again.');
+  }
   if (!res.ok) {
     // The backend sends {"error": "..."} (common/ApiExceptionHandler.java).
     // `?.` = "only read .error if data isn't null"; `??` = "use the right side if the left is null".
@@ -59,6 +71,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 export const api = {
   get: <T>(path: string) => request<T>('GET', path),
   post: <T>(path: string, body: unknown = {}) => request<T>('POST', path, body),
+  delete: <T>(path: string) => request<T>('DELETE', path),
 };
 
 export function checkHealth() {

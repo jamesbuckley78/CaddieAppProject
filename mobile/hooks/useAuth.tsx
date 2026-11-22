@@ -1,7 +1,8 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 
 import * as authApi from '@/api/auth';
-import { ApiError, setAuthToken } from '@/api/client';
+import { ApiError, setAuthToken, setOnLoggedOut } from '@/api/client';
+import { registerForPushNotifications } from '@/api/push';
 import { clearSession, loadSession, saveSession } from '@/api/sessionStorage';
 import type { LoginResponse, User } from '@/types';
 
@@ -38,6 +39,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
     setStatus('signedOut');
   }
+
+  // If any request finds the login expired/cancelled, log out (the screens then go to /login)
+  useEffect(() => {
+    setOnLoggedOut(() => {
+      signOut();
+    });
+    return () => setOnLoggedOut(null);
+  }, []);
+
+  // Once a caddie is properly logged in (own password set), register this phone for "You're
+  // up!" push notifications. The [..] list means: run again only if one of these changes.
+  const pushUserId = user && user.role === 'CADDIE' && !user.mustChangePassword ? user.id : null;
+  useEffect(() => {
+    if (pushUserId !== null) {
+      registerForPushNotifications();
+    }
+  }, [pushUserId]);
 
   // On app start: reuse the saved login straight away (works offline), then ask the
   // server for fresh details. Only a 401 (token expired/invalid) logs the user out.

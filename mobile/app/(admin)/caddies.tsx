@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 
-import { createCaddie, listCaddies, resetSetupCode } from '@/api/caddies';
+import { createCaddie, listCaddies, moveCaddie, resetSetupCode } from '@/api/caddies';
 import { Button } from '@/components/Button';
+import { CaddieTag } from '@/components/CaddieTag';
 import { ErrorText } from '@/components/ErrorText';
 import { Screen } from '@/components/Screen';
 import { TextField } from '@/components/TextField';
@@ -32,6 +33,9 @@ export default function CaddiesScreen() {
   // List state
   const [caddies, setCaddies] = useState<Caddie[]>([]);
   const [listError, setListError] = useState<string | null>(null);
+  const [shown, setShown] = useState(30); // rows shown before "Show more"
+  const [openId, setOpenId] = useState<number | null>(null); // row with its buttons showing
+  const [moveTo, setMoveTo] = useState('');
 
   async function refresh() {
     try {
@@ -72,6 +76,17 @@ export default function CaddiesScreen() {
   async function handleReset(caddie: Caddie) {
     try {
       setNewCode(await resetSetupCode(caddie.id));
+      await refresh();
+    } catch (e) {
+      setListError(errorMessage(e));
+    }
+  }
+
+  async function handleMove(caddie: Caddie) {
+    try {
+      await moveCaddie(caddie.id, Number(moveTo));
+      setOpenId(null);
+      setListError(null);
       await refresh();
     } catch (e) {
       setListError(errorMessage(e));
@@ -144,22 +159,55 @@ export default function CaddiesScreen() {
       </View>
 
       <Text style={styles.cardTitle}>Club list ({caddies.length})</Text>
+      <Text style={styles.muted}>
+        Tap a caddie to move them on the club list (within their group) or give them a new setup code. A move holds
+        until the next 4pm update re-sorts by bags.
+      </Text>
       <ErrorText message={listError} />
       {caddies.length === 0 && !listError && <Text style={styles.muted}>No caddies yet.</Text>}
-      {caddies.map((c) => (
-        <View key={c.id} style={[styles.card, styles.caddieRow]}>
-          <Text style={styles.position}>{c.listPosition}</Text>
-          <View style={{ flex: 1, gap: 2 }}>
-            <Text style={styles.caddieName}>
-              {c.name} {c.priority && <Text style={styles.badge}> P </Text>}
-            </Text>
-            <Text style={styles.muted}>
-              {GRADE_LABEL[c.grade]} · {c.phone} · {c.passwordSet ? 'Active' : 'Waiting for first login'}
-            </Text>
-          </View>
-          <Button label="New code" variant="secondary" onPress={() => handleReset(c)} />
+      {caddies.slice(0, shown).map((c) => (
+        <View key={c.id} style={styles.card}>
+          <Pressable
+            style={styles.caddieRow}
+            onPress={() => {
+              setOpenId(openId === c.id ? null : c.id);
+              setMoveTo('');
+            }}
+            accessibilityRole="button">
+            <Text style={styles.position}>{c.listPosition}</Text>
+            <View style={{ flex: 1, gap: 2 }}>
+              <View style={styles.nameLine}>
+                <CaddieTag priority={c.priority} grade={c.grade} />
+                <Text style={styles.caddieName}>{c.name}</Text>
+              </View>
+              <Text style={styles.muted}>
+                {GRADE_LABEL[c.grade]} · {c.phone} · {c.passwordSet ? 'Active' : 'Waiting for first login'}
+              </Text>
+            </View>
+          </Pressable>
+          {openId === c.id && (
+            <View style={styles.rowActions}>
+              <Text style={styles.muted}>Move to</Text>
+              <TextInput
+                value={moveTo}
+                onChangeText={setMoveTo}
+                keyboardType="number-pad"
+                placeholder={String(c.listPosition)}
+                style={styles.moveInput}
+              />
+              <Button label="Move" variant="secondary" disabled={!Number(moveTo)} onPress={() => handleMove(c)} />
+              <Button label="New code" variant="secondary" onPress={() => handleReset(c)} />
+            </View>
+          )}
         </View>
       ))}
+      {caddies.length > shown && (
+        <Button
+          label={`Show ${Math.min(30, caddies.length - shown)} more (${caddies.length - shown} left)`}
+          variant="secondary"
+          onPress={() => setShown(shown + 30)}
+        />
+      )}
     </Screen>
   );
 }
@@ -195,5 +243,17 @@ const styles = StyleSheet.create({
   caddieRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   position: { width: 32, fontSize: 18, fontWeight: '700', color: colors.text, textAlign: 'right' },
   caddieName: { fontSize: 16, fontWeight: '600', color: colors.text },
-  badge: { backgroundColor: colors.primary, color: colors.primaryText, fontSize: 12, fontWeight: '700' },
+  nameLine: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  rowActions: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 },
+  moveInput: {
+    width: 64,
+    minHeight: 44,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    fontSize: 16,
+    backgroundColor: colors.card,
+    color: colors.text,
+  },
 });

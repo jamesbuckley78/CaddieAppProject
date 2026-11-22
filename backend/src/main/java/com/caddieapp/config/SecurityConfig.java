@@ -18,6 +18,7 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import com.caddieapp.auth.JwtAuthFilter;
 import com.caddieapp.auth.JwtService;
+import com.caddieapp.caddie.UserRepository;
 
 /**
  * Stateless API security: every request carries a JWT (see auth/JwtAuthFilter).
@@ -28,16 +29,18 @@ import com.caddieapp.auth.JwtService;
 public class SecurityConfig {
 
     @Bean
-    SecurityFilterChain securityFilterChain(HttpSecurity http, JwtService jwtService) throws Exception {
+    SecurityFilterChain securityFilterChain(HttpSecurity http, JwtService jwtService, UserRepository users)
+        throws Exception {
         http
             .csrf(csrf -> csrf.disable()) // no cookies/sessions, so CSRF doesn't apply
             .cors(cors -> {})
             .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .exceptionHandling(e -> e.authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))
-            .addFilterBefore(new JwtAuthFilter(jwtService), UsernamePasswordAuthenticationFilter.class)
+            .addFilterBefore(new JwtAuthFilter(jwtService, users), UsernamePasswordAuthenticationFilter.class)
             .authorizeHttpRequests(auth -> auth
-                // "/error" is Spring's error page; without it every error shows as a 401/403
-                .requestMatchers("/", "/error", "/api/health", "/api/auth/login", "/ws/**").permitAll()
+                // "/error" is Spring's error page; without it every error shows as a 401/403.
+                // /ws (live updates, not used yet) is no longer open: it needs a logged-in user.
+                .requestMatchers("/", "/error", "/api/health", "/api/auth/login").permitAll()
                 // set-password and me: any logged-in user, even one still on their setup code
                 .requestMatchers("/api/auth/**").authenticated()
                 .requestMatchers("/api/admin/**").hasRole("ADMIN")

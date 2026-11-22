@@ -23,9 +23,25 @@ spring:
     locations: classpath:db/migration
 
 app:
+  # "production" makes the backend refuse to start with any development default still set
+  # (config/ProductionSafetyCheck).
+  environment: ${APP_ENVIRONMENT:development}
   jwt:
     secret: ${JWT_SECRET:dev-only-secret-change-me-please-at-least-32-chars}
-    expiry-days: 90   # caddies "log in once and stay logged in"
+    expiry-days: 90         # caddies "log in once and stay logged in"
+    admin-expiry-hours: 12  # admins: the board may be on a shared PC
+  # Wrong passwords/setup codes: this many on one phone number locks it for lock-minutes.
+  login:
+    max-attempts: 5
+    lock-minutes: 15
+  # One-time setup codes for new caddies / password resets stop working after this.
+  setup-code-valid-hours: 48
+  # "Not coming in" must be at least this far ahead of the start of the day.
+  absence:
+    min-notice-hours: 24
+  # Push notifications through Expo's push service when a caddie is called.
+  push:
+    enabled: ${PUSH_ENABLED:true}
   timezone: Europe/Dublin
   # "I'm here" only works inside this circle. Set here on purpose so admins can't change it.
   # TODO: put in the club's real coordinates (e.g. the caddie shack - right-click it in Google

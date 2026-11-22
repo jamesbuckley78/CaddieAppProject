@@ -1,76 +1,277 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
+import { Pressable, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 
+import { adminBackIn, callCaddie, changeBagType, moveInLine, noReply, sendOut } from '@/api/board';
 import { fetchBoard } from '@/api/queue';
+import { Button } from '@/components/Button';
+import { CaddieTag } from '@/components/CaddieTag';
 import { ErrorText } from '@/components/ErrorText';
 import { clockTime, statusText } from '@/components/format';
 import { Screen } from '@/components/Screen';
 import { colors } from '@/components/theme';
 import { useLiveData } from '@/hooks/useLiveData';
-import type { BoardEntry } from '@/types';
+import type { BagType, Board, BoardEntry } from '@/types';
+
+const PAGE = 15; // rows shown per table before "Show 15 more"
+
+type TableKey = 'SINGLES' | 'DOUBLES' | 'OUT';
 
 export default function AdminBoard() {
-  const { data: board, error } = useLiveData(fetchBoard, 10000);
-  const entries = board?.entries ?? [];
+  // useWindowDimensions re-draws the screen when it's resized/rotated, so the layout can switch
+  const { width } = useWindowDimensions();
+  const narrow = width < 760;
 
-  // One queue, filtered two ways (CLAUDE.md). Juniors can take singles and doubles, so they
-  // appear in both tables. `.filter()` keeps the items where the function returns true.
+  const { data: board, error, setData } = useLiveData(fetchBoard, 10000);
+  const [tab, setTab] = useState<TableKey>('SINGLES');
+  // Record<K, V> = an object with one V per key - here how many rows each table shows
+  const [limits, setLimits] = useState<Record<TableKey, number>>({ SINGLES: PAGE, DOUBLES: PAGE, OUT: PAGE });
+  const [openRow, setOpenRow] = useState<number | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  /** Runs one board action and shows the updated board it returns. */
+  async function act(action: () => Promise<Board>) {
+    setActionError(null);
+    setBusy(true);
+    try {
+      setData(await action());
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : 'Something went wrong');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const entries = board?.entries ?? [];
+  // One queue, filtered (CLAUDE.md). Juniors can take both, so they're in both tables.
   const waiting = entries.filter((e) => e.status !== 'OUT');
-  const singles = waiting.filter((e) => e.grade !== 'DOUBLE');
-  const doubles = waiting.filter((e) => e.grade !== 'SINGLE');
-  const out = entries.filter((e) => e.status === 'OUT');
+  const tables: Record<TableKey, BoardEntry[]> = {
+    SINGLES: waiting.filter((e) => e.grade !== 'DOUBLE'),
+    DOUBLES: waiting.filter((e) => e.grade !== 'SINGLE'),
+    OUT: entries.filter((e) => e.status === 'OUT'),
+  };
+  const titles: Record<TableKey, string> = { SINGLES: 'Singles', DOUBLES: 'Doubles', OUT: 'Out on course' };
+
+  function table(key: TableKey) {
+    return (
+      <Table
+        key={key}
+        title={titles[key]}
+        kind={key}
+        entries={tables[key]}
+        limit={limits[key]}
+        onMore={() => setLimits({ ...limits, [key]: limits[key] + PAGE })}
+        openRow={openRow}
+        onToggle={(id) => setOpenRow(openRow === id ? null : id)}
+        busy={busy}
+        act={act}
+      />
+    );
+  }
 
   return (
-    <Screen title="Board">
+    <Screen>
       <View style={styles.summary}>
         <Text style={styles.summaryText}>{board?.totalBagsToday ?? 0} bags today</Text>
         <Text style={styles.muted}>
-          {waiting.length} waiting · {out.length} out on course · refreshes every 10 s
+          {waiting.length} waiting · {tables.OUT.length} out on course · tap a name for options
         </Text>
+        {board && board.awayToday.length > 0 && (
+          <Text style={styles.muted}>Off today (approved): {board.awayToday.join(', ')}</Text>
+        )}
       </View>
-      <ErrorText message={error} />
+      <ErrorText message={error ?? actionError} />
 
-      {/* flexWrap: side by side on a tablet/PC, stacked on a phone */}
-      <View style={styles.tables}>
-        <Table title="Singles" entries={singles} />
-        <Table title="Doubles" entries={doubles} />
-      </View>
-
-      {out.length > 0 && <Table title="Out on course" entries={out} />}
+      {narrow ? (
+        <>
+          {/* Phone: one table at a time */}
+          <View style={styles.segments}>
+            {(['SINGLES', 'DOUBLES', 'OUT'] as TableKey[]).map((key) => (
+              <Pressable
+                key={key}
+                onPress={() => setTab(key)}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: tab === key }}
+                style={[styles.segment, tab === key && styles.segmentOn]}>
+                <Text style={[styles.segmentText, tab === key && styles.segmentTextOn]}>
+                  {titles[key]} ({tables[key].length})
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+          {table(tab)}
+        </>
+      ) : (
+        <>
+          {/* Tablet / PC: singles and doubles side by side */}
+          <View style={styles.sideBySide}>
+            {table('SINGLES')}
+            {table('DOUBLES')}
+          </View>
+          {tables.OUT.length > 0 && table('OUT')}
+        </>
+      )}
     </Screen>
   );
 }
 
-function Table({ title, entries }: { title: string; entries: BoardEntry[] }) {
+type TableProps = {
+  title: string;
+  kind: TableKey;
+  entries: BoardEntry[];
+  limit: number;
+  onMore: () => void;
+  openRow: number | null;
+  onToggle: (caddieId: number) => void;
+  busy: boolean;
+  act: (action: () => Promise<Board>) => void;
+};
+
+function Table({ title, kind, entries, limit, onMore, openRow, onToggle, busy, act }: TableProps) {
+  const shown = entries.slice(0, limit); // the next `limit` in line
   return (
     <View style={styles.table}>
       <Text style={styles.heading}>
         {title} ({entries.length})
       </Text>
-      {entries.length === 0 && <Text style={styles.muted}>Nobody here yet.</Text>}
-      {entries.map((e) => (
-        <Row key={e.caddieId} entry={e} />
+      {entries.length === 0 && <Text style={styles.muted}>Nobody here.</Text>}
+      {shown.map((e) => (
+        <Row
+          key={e.caddieId}
+          entry={e}
+          kind={kind}
+          open={openRow === e.caddieId}
+          onToggle={() => onToggle(e.caddieId)}
+          busy={busy}
+          act={act}
+        />
       ))}
+      {entries.length > limit && (
+        <Button
+          label={`Show ${Math.min(PAGE, entries.length - limit)} more (${entries.length - limit} left)`}
+          variant="secondary"
+          onPress={onMore}
+        />
+      )}
     </View>
   );
 }
 
-function Row({ entry }: { entry: BoardEntry }) {
+type RowProps = {
+  entry: BoardEntry;
+  kind: TableKey;
+  open: boolean;
+  onToggle: () => void;
+  busy: boolean;
+  act: (action: () => Promise<Board>) => void;
+};
+
+function Row({ entry, kind, open, onToggle, busy, act }: RowProps) {
   const away = entry.status === 'FOOD' || entry.status === 'BACK_LATER';
+  const called = entry.status === 'CALLED';
   return (
-    <View style={[styles.row, away && styles.rowAway]}>
-      <Text style={styles.position}>{entry.lineNumber ?? '–'}</Text>
-      <View style={{ flex: 1, gap: 2 }}>
-        <View style={styles.nameLine}>
-          <Text style={styles.name}>{entry.name}</Text>
-          {entry.priority && <Text style={styles.badge}>P</Text>}
-          {entry.grade === 'JUNIOR' && <Text style={[styles.badge, styles.junior]}>J</Text>}
+    <View style={[styles.rowWrap, called && styles.rowCalled, open && styles.rowOpen]}>
+      <Pressable onPress={onToggle} accessibilityRole="button" style={styles.row}>
+        <Text style={styles.position}>{entry.lineNumber ?? '–'}</Text>
+        <View style={{ flex: 1, gap: 2 }}>
+          <View style={styles.nameLine}>
+            <CaddieTag priority={entry.priority} grade={entry.grade} />
+            <Text style={styles.name} numberOfLines={1}>
+              {entry.name}
+            </Text>
+            {entry.moved && <Text style={styles.chip}>moved</Text>}
+            {entry.missedCalls > 0 && <Text style={styles.chip}>missed {entry.missedCalls}</Text>}
+          </View>
+          <Text style={styles.muted}>{detailLine(entry)}</Text>
         </View>
-        <Text style={styles.muted}>
-          {entry.bagsThisWeek} {entry.bagsThisWeek === 1 ? 'bag' : 'bags'} this week · in since{' '}
-          {clockTime(entry.checkedInAt)}
+        <Text style={[styles.status, away && styles.statusAway, called && styles.statusCalled]}>
+          {called ? 'Called' : statusText(entry.status, entry.backAt)}
         </Text>
+      </Pressable>
+      {open && <RowActions entry={entry} kind={kind} busy={busy} act={act} />}
+    </View>
+  );
+}
+
+/** The small grey line under a name. */
+function detailLine(e: BoardEntry) {
+  if (e.status === 'CALLED') {
+    const bag = e.calledBagType === 'DOUBLE' ? 'Double' : 'Single';
+    return `${bag} · called ${clockTime(e.calledAt)} · ${e.callAccepted ? 'on the way' : 'waiting for reply'}`;
+  }
+  if (e.status === 'OUT') {
+    const bag = e.currentBagType === 'DOUBLE' ? 'Double' : 'Single';
+    return `${bag} · out since ${clockTime(e.sentOutAt)} · ${e.bagsThisWeek} this week`;
+  }
+  return `${e.bagsThisWeek} ${e.bagsThisWeek === 1 ? 'bag' : 'bags'} this week · in since ${clockTime(e.checkedInAt)}`;
+}
+
+function RowActions({ entry, kind, busy, act }: Omit<RowProps, 'open' | 'onToggle'>) {
+  const [moveTo, setMoveTo] = useState('');
+  const id = entry.caddieId;
+
+  if (entry.status === 'CALLED') {
+    return (
+      <View style={styles.actions}>
+        <Button label="Sent out" onPress={() => act(() => sendOut(id))} loading={busy} />
+        <Button label="No reply" variant="secondary" onPress={() => act(() => noReply(id))} disabled={busy} />
       </View>
-      <Text style={[styles.status, away && styles.statusAway]}>{statusText(entry.status, entry.backAt)}</Text>
+    );
+  }
+
+  if (entry.status === 'OUT') {
+    const other: BagType = entry.currentBagType === 'DOUBLE' ? 'SINGLE' : 'DOUBLE';
+    return (
+      <View style={styles.actions}>
+        <Button label="Back in" onPress={() => act(() => adminBackIn(id))} loading={busy} />
+        {entry.currentLoopId != null && (
+          <Button
+            label={`Was a ${other === 'DOUBLE' ? 'double' : 'single'}`}
+            variant="secondary"
+            onPress={() => act(() => changeBagType(entry.currentLoopId!, other))}
+            disabled={busy}
+          />
+        )}
+      </View>
+    );
+  }
+
+  // Waiting: call (bag types this caddie can take - doubles can take a single, but rarely),
+  // or move them in the line
+  const bags: BagType[] =
+    entry.grade === 'SINGLE' ? ['SINGLE'] : entry.grade === 'DOUBLE' ? ['DOUBLE', 'SINGLE'] : kind === 'DOUBLES' ? ['DOUBLE', 'SINGLE'] : ['SINGLE', 'DOUBLE'];
+  return (
+    <View style={styles.actionsColumn}>
+      <View style={styles.actions}>
+        {bags.map((bag, i) => (
+          <Button
+            key={bag}
+            label={`Call - ${bag === 'DOUBLE' ? 'double' : 'single'}`}
+            variant={i === 0 ? 'primary' : 'secondary'}
+            onPress={() => act(() => callCaddie(id, bag))}
+            disabled={busy}
+          />
+        ))}
+      </View>
+      <View style={styles.moveRow}>
+        <Text style={styles.muted}>Move to number</Text>
+        <TextInput
+          value={moveTo}
+          onChangeText={setMoveTo}
+          keyboardType="number-pad"
+          placeholder={String(entry.lineNumber ?? '')}
+          style={styles.moveInput}
+        />
+        <Button
+          label="Move"
+          variant="secondary"
+          disabled={busy || !Number(moveTo)}
+          onPress={() => act(() => moveInLine(id, Number(moveTo)))}
+        />
+        {entry.moved && (
+          <Button label="Undo move" variant="secondary" disabled={busy} onPress={() => act(() => moveInLine(id, null))} />
+        )}
+      </View>
     </View>
   );
 }
@@ -79,41 +280,52 @@ const styles = StyleSheet.create({
   summary: { gap: 2 },
   summaryText: { fontSize: 20, fontWeight: '700', color: colors.text },
   muted: { color: colors.muted, fontSize: 13 },
-  tables: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  segments: { flexDirection: 'row', backgroundColor: colors.card, borderRadius: 8, borderWidth: 1, borderColor: colors.border },
+  segment: { flex: 1, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 8 },
+  segmentOn: { backgroundColor: colors.primary },
+  segmentText: { fontSize: 13, fontWeight: '600', color: colors.text, textAlign: 'center' },
+  segmentTextOn: { color: colors.primaryText },
+  sideBySide: { flexDirection: 'row', gap: 12, alignItems: 'flex-start' },
   table: {
-    flexGrow: 1,
-    flexBasis: 320,
+    flex: 1,
     backgroundColor: colors.card,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: 10,
     padding: 12,
-    gap: 8,
+    gap: 6,
   },
   heading: { fontSize: 18, fontWeight: '600', color: colors.text },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingVertical: 8,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  rowAway: { opacity: 0.75 },
+  rowWrap: { borderTopWidth: 1, borderTopColor: colors.border },
+  rowCalled: { backgroundColor: colors.highlight },
+  rowOpen: { backgroundColor: colors.stripe },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, paddingHorizontal: 4 },
   position: { width: 28, fontSize: 18, fontWeight: '700', color: colors.text, textAlign: 'right' },
-  nameLine: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  name: { fontSize: 16, fontWeight: '600', color: colors.text },
-  badge: {
-    backgroundColor: colors.primary,
-    color: colors.primaryText,
+  nameLine: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
+  name: { fontSize: 16, fontWeight: '600', color: colors.text, flexShrink: 1 },
+  chip: {
     fontSize: 11,
-    fontWeight: '700',
-    paddingHorizontal: 6,
-    paddingVertical: 1,
+    color: colors.muted,
+    borderWidth: 1,
+    borderColor: colors.border,
     borderRadius: 4,
-    overflow: 'hidden',
+    paddingHorizontal: 4,
   },
-  junior: { backgroundColor: colors.muted },
   status: { fontSize: 13, fontWeight: '600', color: colors.primary },
   statusAway: { color: colors.danger },
+  statusCalled: { color: '#b25a00' },
+  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 4, paddingBottom: 10 },
+  actionsColumn: { gap: 4 },
+  moveRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8, paddingHorizontal: 4, paddingBottom: 10 },
+  moveInput: {
+    width: 64,
+    minHeight: 44,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    fontSize: 16,
+    backgroundColor: colors.card,
+    color: colors.text,
+  },
 });

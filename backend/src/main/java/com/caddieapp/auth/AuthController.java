@@ -42,4 +42,16 @@ public class AuthController {
     public UserResponse me(@AuthenticationPrincipal AuthUser user) {
         return authService.me(user.id());
     }
+
+    /** provider: "EXPO" (this app) or later "FCM" (a Flutter app). */
+    public record PushTokenRequest(
+        @jakarta.validation.constraints.Pattern(regexp = "EXPO|FCM") String provider,
+        @jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Size(max = 255) String token) {
+    }
+
+    /** Where to send this user's push notifications. */
+    @PostMapping("/push-token")
+    public void pushToken(@AuthenticationPrincipal AuthUser user, @Valid @RequestBody PushTokenRequest request) {
+        authService.savePushToken(user.id(), request.provider(), request.token());
+    }
 }

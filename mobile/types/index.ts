@@ -65,6 +65,10 @@ export interface MyDay {
   bagsThisWeek: number;
   clubPosition: number;
   locationRequired: boolean;
+  // While status is CALLED
+  calledBagType: BagType | null;
+  calledAt: string | null;
+  callAccepted: boolean; // they've tapped "On my way"
 }
 
 /** Order and figures both come from the daily update at `updatesAt` ("16:00"). */
@@ -99,10 +103,68 @@ export interface BoardEntry {
   bagsThisWeek: number;
   clubPosition: number;
   lineNumber: number | null;
+  moved: boolean; // admin moved them by hand today (holds until their next bag)
+  missedCalls: number;
+  // While CALLED
+  calledBagType: BagType | null;
+  calledAt: string | null;
+  callAccepted: boolean;
+  // While OUT: the bag they're carrying, so it can be corrected
+  currentLoopId: number | null;
+  currentBagType: BagType | null;
+  sentOutAt: string | null;
 }
 
 export interface Board {
   date: string;
   totalBagsToday: number;
   entries: BoardEntry[]; // already in today's line order
+  awayToday: string[]; // names with an approved "not coming in" for today
+}
+
+// ---- Not coming in (backend/.../absence) ----
+export type AbsenceStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+
+export interface Absence {
+  id: number;
+  caddieId: number;
+  caddieName: string;
+  date: string; // "2026-11-27"
+  reason: string | null;
+  status: AbsenceStatus;
+  submittedAt: string;
+  decidedAt: string | null;
+}
+
+export interface MyAbsences {
+  earliestDate: string; // the first date that's far enough ahead (24h notice)
+  requests: Absence[];
+}
+
+export interface Inbox {
+  pending: Absence[];
+  recentlyDecided: Absence[];
+}
+
+// ---- History (backend/.../loop/HistoryService) ----
+export interface HistoryLoop {
+  id: number;
+  date: string;
+  bagType: BagType;
+  sentOutAt: string | null;
+  returnedAt: string | null;
+}
+
+export interface HistoryWeek {
+  weekStart: string;
+  bags: number; // a double counts as 2
+  loops: number;
+  daysWorked: number;
+  loopRows: HistoryLoop[];
+}
+
+export interface History {
+  totalBags: number;
+  totalDaysWorked: number;
+  weeks: HistoryWeek[];
 }

@@ -14,6 +14,7 @@ import com.caddieapp.caddie.Caddie;
 import com.caddieapp.caddie.CaddieRepository;
 import com.caddieapp.common.ApiException;
 import com.caddieapp.common.Enums.QueueStatus;
+import com.caddieapp.loop.AssignmentService;
 
 /** A caddie's own status changes: I'm here, getting food, will be back, finished for today. */
 @Service
@@ -27,14 +28,17 @@ public class AvailabilityService {
     private final QueueEntryRepository entries;
     private final AttendanceRecorder attendance;
     private final GeoFence geoFence;
+    private final AssignmentService assignments;
     private final Clock clock;
 
     public AvailabilityService(CaddieRepository caddies, QueueEntryRepository entries,
-                               AttendanceRecorder attendance, GeoFence geoFence, Clock clock) {
+                               AttendanceRecorder attendance, GeoFence geoFence, AssignmentService assignments,
+                               Clock clock) {
         this.caddies = caddies;
         this.entries = entries;
         this.attendance = attendance;
         this.geoFence = geoFence;
+        this.assignments = assignments;
         this.clock = clock;
     }
 
@@ -90,8 +94,27 @@ public class AvailabilityService {
         if (entry.getStatus() == QueueStatus.OUT) {
             throw new ApiException(HttpStatus.CONFLICT, "You're out on course - finish your loop first");
         }
+        if (entry.getStatus() == QueueStatus.CALLED) {
+            throw new ApiException(HttpStatus.CONFLICT, "You've been called - tell the caddie master first");
+        }
         entry.changeStatus(QueueStatus.OFF, null);
         attendance.checkedOut(caddie.getId(), entry.getDate(), LocalDateTime.now(clock));
+    }
+
+    /** "On my way" after being called - shows on the admin's board. */
+    @Transactional
+    public void acceptCall(long userId) {
+        QueueEntry entry = todaysEntry(caddieFor(userId));
+        if (entry.getStatus() != QueueStatus.CALLED) {
+            throw new ApiException(HttpStatus.CONFLICT, "You haven't been called");
+        }
+        entry.acceptCall(LocalDateTime.now(clock));
+    }
+
+    /** "Back in" after a loop: available again. */
+    @Transactional
+    public void backIn(long userId) {
+        assignments.backIn(null, caddieFor(userId).getId());
     }
 
     private Caddie caddieFor(long userId) {

@@ -39,8 +39,19 @@ Database changes go in `backend/src/main/resources/db/migration/` as new `V2__..
 - The first admin is created automatically when the backend starts with no admin in the database: phone **087 000 0000**, password **admin1234**. You'll be asked to choose a new password straight away.
 - As admin, open **Caddies**, add a caddie, and note the 6-digit setup code shown.
 - Log out, then log in with the caddie's phone number and that code. They choose a password and land on their **Today** screen.
-- Forgot a password? Admin taps **New code** next to the caddie.
-- Caddies tap **I'm here** on the Today tab. The admin sees them on the **Board** tab; caddies see their own number, today's bag total and the **Club list** tab.
+- Setup codes work for 48 hours. Forgot a password, or code expired? Admin taps the caddie on the **Caddies** tab, then **New code**.
+- Five wrong passwords on one phone number locks it for 15 minutes.
+- Admin logins last 12 hours; caddies stay logged in for 90 days.
+
+## Using it
+- **Caddie - Today:** "I'm here", then Available / Getting food / Will be back / Finished for today. When called: "You're up!" -> **On my way**. After a loop: **Back in**.
+- **Caddie - Club list, Not coming in, History** tabs: the club table, absence requests (24 h notice), and their own loops and days worked.
+- **Admin - Board:** tap a name for its buttons: **Call - single/double**, **Move to number**, then **Sent out** / **No reply**, and for someone out on course **Back in** / **Was a double/single**. On a phone, switch between Singles / Doubles / Out on course; each shows 15 at a time.
+- **Admin - Caddies:** add caddies, tap one to move them on the club list (within their group) or give a new setup code.
+- **Admin - Inbox:** approve or reject "not coming in" requests.
+
+## Push notifications
+The backend sends an Expo push notification when a caddie is called. Push only works in a real installed build on a phone - not in Expo Go, the emulator or the web, where the caddie still sees the call on their Today screen within 10 seconds. To try it: `npx eas init` (adds the project id to `app.json`), then an EAS development build on an Android phone.
 
 ## Demo data (local testing only)
 40 made-up caddies (phone numbers starting 0899) with bags this week and a mix of statuses today, so the board and club list have something to show. Run from the project folder in PowerShell:
@@ -59,7 +70,5 @@ Demo caddies can't log in. Never run this against the real club database.
 2. Put them in `latitude` / `longitude`, pick a `radius-meters` (400 m covers most clubhouses).
 3. Set `require-location` to `true`. It's `false` for now so you can test from home.
 
-- Locked yourself out of the admin account? Clear the users and restart the backend (it recreates the default admin):
-  ```bash
-  docker exec caddie-mysql mysql -ucaddie -pchange-me caddie -e "DELETE FROM caddies; DELETE FROM users;"
-  ```
+## Forgotten admin password
+Only a BCrypt hash is stored, so it can't be read back. It has to be replaced in the `users` table with a new hash (and `must_change_password = 1`). The account can't simply be deleted once it has done anything, because the audit log refers to it.

@@ -9,6 +9,11 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.util.List;
 import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
@@ -18,6 +23,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import com.caddieapp.audit.AuditLog;
 import com.caddieapp.caddie.CaddieDtos.CaddieWithSetupCode;
 import com.caddieapp.caddie.CaddieDtos.CreateCaddieRequest;
 import com.caddieapp.common.ApiException;
@@ -31,7 +37,10 @@ class CaddieServiceTest {
     private final UserRepository users = mock(UserRepository.class);
     private final CaddieRepository caddies = mock(CaddieRepository.class);
     private final PasswordEncoder encoder = new BCryptPasswordEncoder(4);
-    private final CaddieService service = new CaddieService(users, caddies, encoder, new QueueService());
+    private final AuditLog audit = mock(AuditLog.class);
+    private final Clock clock = Clock.fixed(Instant.parse("2026-11-25T12:00:00Z"), ZoneId.of("Europe/Dublin"));
+    private final CaddieService service = new CaddieService(users, caddies, encoder, new QueueService(), audit,
+        clock, 48);
 
     /** Make the mocked save() behave like the database: hand back the entity with an id. */
     private void saveAssignsIds() {
@@ -156,10 +165,64 @@ class CaddieServiceTest {
         ReflectionTestUtils.setField(caddie, "id", 20L);
         when(caddies.findById(20L)).thenReturn(Optional.of(caddie));
 
+        int versionBefore = user.getTokenVersion();
+
         CaddieWithSetupCode result = service.resetSetupCode(20);
 
         assertThat(user.isMustChangePassword()).isTrue();
         assertThat(encoder.matches(result.setupCode(), user.getPasswordHash())).isTrue();
         assertThat(encoder.matches("old-password", user.getPasswordHash())).isFalse();
+        assertThat(user.getTokenVersion()).isEqualTo(versionBefore + 1); // logged out everywhere
+        assertThat(user.getSetupCodeExpiresAt()).isEqualTo(LocalDateTime.now(clock).plusHours(48));
+    }
+
+    @Test
+    void newCaddieSetupCodeExpiresIn48Hours() {
+        saveAssignsIds();
+
+        service.create(request("0871234567", Grade.SINGLE, false, null));
+
+        ArgumentCaptor<User> saved = ArgumentCaptor.forClass(User.class);
+        verify(users).save(saved.capture());
+        assertThat(saved.getValue().getSetupCodeExpiresAt()).isEqualTo(LocalDateTime.now(clock).plusHours(48));
+    }
+
+    // ---- Moving on the club list ----
+
+    private static Caddie listed(long id, Grade grade, boolean priority, int position) {
+        User user = new User("C" + id, "08600000" + id, Role.CADDIE, "hash", false);
+        ReflectionTestUtils.setField(user, "id", 100 + id);
+        Caddie caddie = new Caddie(user, grade, priority, position);
+        ReflectionTestUtils.setField(caddie, "id", id);
+        return caddie;
+    }
+
+    @Test
+    void moveWithinGroupShiftsOthersAndIsAudited() {
+        Caddie p1 = listed(1, Grade.SINGLE, true, 1);
+        Caddie a1 = listed(2, Grade.SINGLE, false, 2);
+        Caddie a2 = listed(3, Grade.DOUBLE, false, 3);
+        Caddie a3 = listed(4, Grade.SINGLE, false, 4);
+        Caddie j1 = listed(5, Grade.JUNIOR, false, 5);
+        when(caddies.findClubList()).thenReturn(List.of(p1, a1, a2, a3, j1));
+
+        service.moveInClubList(99, 4, 2); // a3 from 4 up to 2
+
+        assertThat(List.of(p1, a3, a1, a2, j1)).extracting(Caddie::getListPosition).containsExactly(1, 2, 3, 4, 5);
+        verify(audit).record(org.mockito.ArgumentMatchers.eq(99L), org.mockito.ArgumentMatchers.eq("MOVE_CLUB_LIST"),
+            any(), any());
+    }
+
+    @Test
+    void cannotMoveOutOfTheirGroup() {
+        Caddie p1 = listed(1, Grade.SINGLE, true, 1);
+        Caddie a1 = listed(2, Grade.SINGLE, false, 2);
+        Caddie j1 = listed(3, Grade.JUNIOR, false, 3);
+        when(caddies.findClubList()).thenReturn(List.of(p1, a1, j1));
+
+        assertThatThrownBy(() -> service.moveInClubList(99, 3, 2))
+            .isInstanceOf(ApiException.class).hasMessageContaining("juniors");
+        assertThatThrownBy(() -> service.moveInClubList(99, 2, 1))
+            .isInstanceOf(ApiException.class).hasMessageContaining("between 2 and 2");
     }
 }

@@ -39,16 +39,27 @@ Who gets called next today. Only caddies who checked in today appear, ordered by
 
 ## Checking in and statuses
 - **"I'm here"** needs the phone to be inside the club area set in `application.yml` (`app.check-in`). The server checks the distance, so a modified app can't skip it. Location is read only at that moment.
-- Once checked in, a caddie can be: **Available**, **Getting food**, **Will be back** (with their own time estimate, e.g. 15 min - the admin sees "back ~10:45"), or **Finished for today** (checks out). Later: **Out on course**, set when the admin assigns a bag.
+- Once checked in, a caddie can be: **Available**, **Getting food**, **Will be back** (with their own time estimate, e.g. 15 min - the admin sees "back ~10:45"), or **Finished for today** (checks out). The admin's buttons add **Called** and **Out on course**.
 - Getting food / Will be back **keep their place**. The status only tells the admin they may not answer straight away; the admin can still call them.
 
-## Calling and no-reply (next feature)
-- When the admin calls a caddie they get a notification.
-- If they don't reply, it's the admin's call whether to try again or call the next person. The non-replier **keeps their place** ("a missed opportunity") and is next in line for the following call. No automatic timer.
+## Calling a caddie
+**Call** (admin, single or double) -> caddie sees "You're up!" (and gets a push notification) and can tap **On my way** -> admin taps **Sent out** when they turn up -> out on course -> **Back in** (caddie or admin).
+- The bag is recorded (and counts) when they're **sent out**, not when they're called.
+- Singles can only be called for a single; doubles for a double, or a single if the admin chooses (rarely); juniors for either.
+- **No reply**: it's the admin's call whether to try again or call the next person. The non-replier **keeps their place** ("a missed opportunity", shown as "missed 1" on the board) and is next in line for the following call. No automatic timer.
+- A called caddie can't change their status or check out until the admin sends them out or marks no reply.
+- **Wrong bag type?** The admin taps "Was a double/single" on someone out on course; their bag count changes straight away.
+- Two admins can't call the same caddie at once: the database row is locked while each action runs.
 
-## Manual moves by the admin (next feature)
-- Used when someone comes back from another job, or to fix a mistake (e.g. wrong bag type entered).
-- A move **holds for that day until the caddie gets a bag** (or the next 4pm update), then the normal rules apply to them again. Every move goes in the audit log.
+## Manual moves by the admin
+- **On the board (today's line)**: "Move to number N". Used when someone comes back from another job, or to fix a mistake. The move **holds until the caddie's next bag** (it's cleared when they're sent out) or the end of the day. "Undo move" puts them back where the rules say.
+- **On the club list** (Caddies tab): move a caddie to another position, e.g. 70 -> 50 after a mistake, but only **within their own group** (priority / other adults / juniors). It holds until the next 4pm update re-sorts by bags.
+- Every move, call, send-out, no-reply, bag correction and absence decision goes in the audit log (`audit_log`).
+
+## Not coming in
+- A caddie picks a date at least **24 hours before the start of that day** (`app.absence.min-notice-hours`), with an optional reason. One request per day.
+- The admin approves or rejects it in the **Inbox**. The caddie sees the answer and can withdraw a request until it's answered.
+- Approved absences for today are listed at the top of the admin board.
 
 ## Club list screen and daily total
 - Shown as a table: position, name with one coloured tag (**P** priority, otherwise **S** single, **D** double, **J** junior), bags on each day Mon-Fri, and the week total (weekend included - that's what orders the list). A **Total** row at the bottom shows the whole club's bags each day and for the week.
