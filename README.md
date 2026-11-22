@@ -40,6 +40,14 @@ Database changes go in `backend/src/main/resources/db/migration/` as new `V2__..
 - As admin, open **Caddies**, add a caddie, and note the 6-digit setup code shown.
 - Log out, then log in with the caddie's phone number and that code. They choose a password and land on their **Today** screen.
 - Forgot a password? Admin taps **New code** next to the caddie.
+- Caddies tap **I'm here** on the Today tab. The admin sees them on the **Board** tab; caddies see their own number, today's bag total and the **Club list** tab.
+
+## GPS check-in area
+"I'm here" only works within a circle around the club, set in `backend/src/main/resources/application.yml` under `app.check-in` (not changeable from the app):
+1. In Google Maps, right-click the caddie shack and click the coordinates to copy them.
+2. Put them in `latitude` / `longitude`, pick a `radius-meters` (400 m covers most clubhouses).
+3. Set `require-location` to `true`. It's `false` for now so you can test from home.
+
 - Locked yourself out of the admin account? Clear the users and restart the backend (it recreates the default admin):
   ```bash
   docker exec caddie-mysql mysql -ucaddie -pchange-me caddie -e "DELETE FROM caddies; DELETE FROM users;"

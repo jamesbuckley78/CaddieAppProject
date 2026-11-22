@@ -41,6 +41,7 @@ public class SecurityConfig {
                 // set-password and me: any logged-in user, even one still on their setup code
                 .requestMatchers("/api/auth/**").authenticated()
                 .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                .requestMatchers("/api/availability/**").hasRole("CADDIE")
                 // everything else: a caddie or admin who has set their own password
                 .anyRequest().hasAnyRole("CADDIE", "ADMIN"));
         return http.build();

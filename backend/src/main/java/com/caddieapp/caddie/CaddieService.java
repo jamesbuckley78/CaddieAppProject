@@ -13,8 +13,10 @@ import com.caddieapp.caddie.CaddieDtos.CaddieWithSetupCode;
 import com.caddieapp.caddie.CaddieDtos.CreateCaddieRequest;
 import com.caddieapp.common.ApiException;
 import com.caddieapp.common.Enums.Grade;
+import com.caddieapp.common.Enums.Placement;
 import com.caddieapp.common.Enums.Role;
 import com.caddieapp.common.PhoneNumbers;
+import com.caddieapp.queue.QueueService;
 
 @Service
 public class CaddieService {
@@ -22,12 +24,15 @@ public class CaddieService {
     private final UserRepository users;
     private final CaddieRepository caddies;
     private final PasswordEncoder passwordEncoder;
+    private final QueueService queueService;
     private final SecureRandom random = new SecureRandom();
 
-    public CaddieService(UserRepository users, CaddieRepository caddies, PasswordEncoder passwordEncoder) {
+    public CaddieService(UserRepository users, CaddieRepository caddies, PasswordEncoder passwordEncoder,
+                         QueueService queueService) {
         this.users = users;
         this.caddies = caddies;
         this.passwordEncoder = passwordEncoder;
+        this.queueService = queueService;
     }
 
     /**
@@ -45,16 +50,27 @@ public class CaddieService {
             throw new ApiException(HttpStatus.BAD_REQUEST, "Juniors can't be priority caddies");
         }
 
+        // docs/RULES.md: a new caddie goes to the top of their group with 0 bags, unless the
+        // admin is copying the paper list in order (bottom of group).
+        Placement placement = request.placement() == null ? Placement.TOP_OF_GROUP : request.placement();
+        int lastPosition = caddies.findMaxListPosition();
+        int position = queueService.newCaddiePosition(request.priority(), placement,
+            caddies.countByPriorityTrue(), lastPosition);
+        if (position <= lastPosition) {
+            caddies.shiftDownFrom(position);
+        }
+
         String setupCode = newSetupCode();
         User user = users.save(new User(request.name().trim(), phone, Role.CADDIE,
             passwordEncoder.encode(setupCode), true));
-        Caddie caddie = caddies.save(new Caddie(user, request.grade(), request.priority()));
+        Caddie caddie = caddies.save(new Caddie(user, request.grade(), request.priority(), position));
         return new CaddieWithSetupCode(CaddieResponse.from(caddie), setupCode);
     }
 
+    /** Everyone, in club list order. */
     @Transactional(readOnly = true)
     public List<CaddieResponse> list() {
-        return caddies.findAllWithUser().stream().map(CaddieResponse::from).toList();
+        return caddies.findClubList().stream().map(CaddieResponse::from).toList();
     }
 
     /** Forgotten password: give the caddie a new setup code. Their old password stops working. */
