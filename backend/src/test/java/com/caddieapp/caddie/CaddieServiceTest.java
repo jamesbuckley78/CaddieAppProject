@@ -3,6 +3,7 @@ package com.caddieapp.caddie;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -11,6 +12,7 @@ import static org.mockito.Mockito.when;
 import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -20,14 +22,16 @@ import com.caddieapp.caddie.CaddieDtos.CaddieWithSetupCode;
 import com.caddieapp.caddie.CaddieDtos.CreateCaddieRequest;
 import com.caddieapp.common.ApiException;
 import com.caddieapp.common.Enums.Grade;
+import com.caddieapp.common.Enums.Placement;
 import com.caddieapp.common.Enums.Role;
+import com.caddieapp.queue.QueueService;
 
 class CaddieServiceTest {
 
     private final UserRepository users = mock(UserRepository.class);
     private final CaddieRepository caddies = mock(CaddieRepository.class);
     private final PasswordEncoder encoder = new BCryptPasswordEncoder(4);
-    private final CaddieService service = new CaddieService(users, caddies, encoder);
+    private final CaddieService service = new CaddieService(users, caddies, encoder, new QueueService());
 
     /** Make the mocked save() behave like the database: hand back the entity with an id. */
     private void saveAssignsIds() {
@@ -43,12 +47,16 @@ class CaddieServiceTest {
         });
     }
 
+    private static CreateCaddieRequest request(String phone, Grade grade, boolean priority, Placement placement) {
+        return new CreateCaddieRequest("A", phone, grade, priority, placement);
+    }
+
     @Test
     void createsCaddieWithSixDigitSetupCodeStoredHashed() {
         saveAssignsIds();
 
         CaddieWithSetupCode result = service.create(
-            new CreateCaddieRequest("  Sean Murphy ", "087 123 4567", Grade.DOUBLE, true));
+            new CreateCaddieRequest("  Sean Murphy ", "087 123 4567", Grade.DOUBLE, true, null));
 
         assertThat(result.setupCode()).matches("\\d{6}");
         assertThat(result.caddie().name()).isEqualTo("Sean Murphy");
@@ -61,9 +69,9 @@ class CaddieServiceTest {
     @Test
     void setupCodeIsNotStoredInPlainText() {
         saveAssignsIds();
-        CaddieWithSetupCode result = service.create(new CreateCaddieRequest("A", "0871234567", Grade.SINGLE, false));
+        CaddieWithSetupCode result = service.create(request("0871234567", Grade.SINGLE, false, null));
 
-        var captor = org.mockito.ArgumentCaptor.forClass(User.class);
+        ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
         verify(users).save(captor.capture());
         User saved = captor.getValue();
         assertThat(saved.getRole()).isEqualTo(Role.CADDIE);
@@ -72,10 +80,35 @@ class CaddieServiceTest {
     }
 
     @Test
+    void newCaddieGoesToTopOfNonPriorityGroupAndOthersShiftDown() {
+        saveAssignsIds();
+        when(caddies.countByPriorityTrue()).thenReturn(50L);
+        when(caddies.findMaxListPosition()).thenReturn(120);
+
+        CaddieWithSetupCode result = service.create(request("0871234567", Grade.SINGLE, false, null));
+
+        assertThat(result.caddie().listPosition()).isEqualTo(51);
+        verify(caddies).shiftDownFrom(51);
+    }
+
+    @Test
+    void paperListSetupAddsAtTheBottomWithoutShifting() {
+        saveAssignsIds();
+        when(caddies.countByPriorityTrue()).thenReturn(50L);
+        when(caddies.findMaxListPosition()).thenReturn(120);
+
+        CaddieWithSetupCode result = service.create(
+            request("0871234567", Grade.SINGLE, false, Placement.BOTTOM_OF_GROUP));
+
+        assertThat(result.caddie().listPosition()).isEqualTo(121);
+        verify(caddies, never()).shiftDownFrom(anyInt());
+    }
+
+    @Test
     void duplicatePhoneIsRejected() {
         when(users.existsByPhone("0871234567")).thenReturn(true);
 
-        assertThatThrownBy(() -> service.create(new CreateCaddieRequest("A", "087-123-4567", Grade.SINGLE, false)))
+        assertThatThrownBy(() -> service.create(request("087-123-4567", Grade.SINGLE, false, null)))
             .isInstanceOf(ApiException.class)
             .satisfies(e -> assertThat(((ApiException) e).getStatus()).isEqualTo(HttpStatus.CONFLICT));
         verify(users, never()).save(any());
@@ -83,7 +116,7 @@ class CaddieServiceTest {
 
     @Test
     void juniorCannotBePriority() {
-        assertThatThrownBy(() -> service.create(new CreateCaddieRequest("A", "0871234567", Grade.JUNIOR, true)))
+        assertThatThrownBy(() -> service.create(request("0871234567", Grade.JUNIOR, true, null)))
             .isInstanceOf(ApiException.class)
             .hasMessageContaining("Juniors");
     }
@@ -92,7 +125,7 @@ class CaddieServiceTest {
     void resetGivesNewCodeAndForcesPasswordChange() {
         User user = new User("A", "0871234567", Role.CADDIE, encoder.encode("old-password"), false);
         ReflectionTestUtils.setField(user, "id", 10L);
-        Caddie caddie = new Caddie(user, Grade.SINGLE, false);
+        Caddie caddie = new Caddie(user, Grade.SINGLE, false, 1);
         ReflectionTestUtils.setField(caddie, "id", 20L);
         when(caddies.findById(20L)).thenReturn(Optional.of(caddie));
 

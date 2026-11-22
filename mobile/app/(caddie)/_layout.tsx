@@ -24,6 +24,7 @@ export default function CaddieLayout() {
         tabBarLabelStyle: { fontSize: 14 },
       }}>
       <Tabs.Screen name="home" options={{ title: 'Today' }} />
+      <Tabs.Screen name="list" options={{ title: 'Club list' }} />
       <Tabs.Screen name="absence" options={{ title: 'Not coming in' }} />
       <Tabs.Screen name="report" options={{ title: 'Report issue' }} />
       <Tabs.Screen name="history" options={{ title: 'History' }} />

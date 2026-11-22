@@ -22,6 +22,8 @@ export default function CaddiesScreen() {
   const [phone, setPhone] = useState('');
   const [grade, setGrade] = useState<Grade>('SINGLE');
   const [priority, setPriority] = useState(false);
+  // On while copying the paper list in order: each new caddie goes to the bottom of their group
+  const [paperList, setPaperList] = useState(false);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   // Last setup code to show the admin (created or reset)
@@ -48,7 +50,13 @@ export default function CaddiesScreen() {
     setFormError(null);
     setSaving(true);
     try {
-      const result = await createCaddie({ name, phone, grade, priority });
+      const result = await createCaddie({
+        name,
+        phone,
+        grade,
+        priority,
+        placement: paperList ? 'BOTTOM_OF_GROUP' : 'TOP_OF_GROUP',
+      });
       setNewCode(result);
       setName('');
       setPhone('');
@@ -119,15 +127,28 @@ export default function CaddiesScreen() {
           <Switch value={priority} onValueChange={setPriority} disabled={grade === 'JUNIOR'} />
         </View>
 
+        <View style={styles.switchRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.label}>Copying the paper list</Text>
+            <Text style={styles.muted}>
+              {paperList
+                ? 'Adds at the bottom of their group, so entering names in paper-list order keeps that order.'
+                : 'New caddie: goes to the top of their group with 0 bags.'}
+            </Text>
+          </View>
+          <Switch value={paperList} onValueChange={setPaperList} />
+        </View>
+
         <ErrorText message={formError} />
         <Button label="Create caddie" onPress={handleCreate} loading={saving} disabled={!name || !phone} />
       </View>
 
-      <Text style={styles.cardTitle}>All caddies ({caddies.length})</Text>
+      <Text style={styles.cardTitle}>Club list ({caddies.length})</Text>
       <ErrorText message={listError} />
       {caddies.length === 0 && !listError && <Text style={styles.muted}>No caddies yet.</Text>}
       {caddies.map((c) => (
         <View key={c.id} style={[styles.card, styles.caddieRow]}>
+          <Text style={styles.position}>{c.listPosition}</Text>
           <View style={{ flex: 1, gap: 2 }}>
             <Text style={styles.caddieName}>
               {c.name} {c.priority && <Text style={styles.badge}> P </Text>}
@@ -172,6 +193,7 @@ const styles = StyleSheet.create({
   choiceTextSelected: { color: colors.primaryText },
   switchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   caddieRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  position: { width: 32, fontSize: 18, fontWeight: '700', color: colors.text, textAlign: 'right' },
   caddieName: { fontSize: 16, fontWeight: '600', color: colors.text },
   badge: { backgroundColor: colors.primary, color: colors.primaryText, fontSize: 12, fontWeight: '700' },
 });

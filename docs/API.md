@@ -25,13 +25,17 @@ Status: **planned** means not built yet. Update this table as endpoints are adde
 | POST | `/admin/caddies` | admin | `{name, phone, grade, priority}` -> `{caddie, setupCode}` (201). Juniors can't be priority | built |
 | GET | `/admin/caddies` | admin | List caddies, sorted by name | built |
 | POST | `/admin/caddies/{id}/reset-code` | admin | Forgotten password: new setup code, old password stops working | built |
-| POST | `/availability/check-in` | caddie | "I'm here" - join today's list | planned |
-| POST | `/availability/break` | caddie | Go on break | planned |
-| POST | `/availability/back-in` | caddie | Back in after a loop or break | planned |
-| GET | `/queue/today` | both | Today's list (filter with `?bag=SINGLE` or `?bag=DOUBLE`) | planned |
-| GET | `/queue/me` | caddie | Own position and how many are ahead by bag type | planned |
+| POST | `/admin/caddies` `placement` | admin | Optional `TOP_OF_GROUP` (default, new caddie) or `BOTTOM_OF_GROUP` (copying the paper list) | built |
+| POST | `/availability/check-in` | caddie | "I'm here". Body `{latitude, longitude}`; 400 without a position, 403 outside the club area (`app.check-in`). Returns my day | built |
+| POST | `/availability/status` | caddie | `{status: AVAILABLE \| FOOD \| BACK_LATER, backInMinutes?}` (5-240, needed for BACK_LATER). Keeps their place. 409 if out on course | built |
+| POST | `/availability/check-out` | caddie | "Finished for today" - leaves today's line | built |
+| GET | `/queue/me` | caddie | My day: checked in?, status, `backAt`, `lineNumber` ("5th in line"), bags this week, club position, today's club total | built |
+| GET | `/queue/club-list` | both | The club list (position, name, grade, priority, bags this week) | built |
+| GET | `/admin/board` | admin | Everyone checked in today, in line order, with status and line number (null = out on course) | built |
+| POST | `/admin/club-list/recalculate` | admin | Re-order the club list now with this week's bags (normally the midnight job does it) | built |
 | POST | `/loops` | admin | Assign a bag to a caddie (row-locked transaction) | planned |
 | PATCH | `/loops/{id}` | admin | Change the bag type | planned |
+| POST | `/admin/queue/{caddieId}/move` | admin | Manual move, holds until the caddie's next bag (audit logged) | planned |
 
 ## Accounts
 - No public sign-up. The first admin is created on start-up from `app.bootstrap-admin.*` in `application.yml` (dev default: phone `0870000000`, password `admin1234`) if no admin exists. They must set a new password on first login.
@@ -39,4 +43,5 @@ Status: **planned** means not built yet. Update this table as endpoints are adde
 - Tokens last 90 days (`app.jwt.expiry-days`).
 
 ## Real-time
-WebSocket (STOMP) at `/ws`. Clients subscribe to `/topic/queue` and get the updated list whenever it changes.
+For now the app refreshes on a timer (`mobile/hooks/useLiveData.ts`: board every 10 s, caddie screen every 15 s) and whenever a screen comes into view.
+Planned: WebSocket (STOMP) at `/ws` sending a content-free "changed" ping on `/topic/queue`, so screens refetch straight away. The ping must not include names, because caddies can't see who is checked in.

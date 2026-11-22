@@ -76,4 +76,5 @@ CaddieAppProject/
 ```
 
 ## Next step
-Skeleton and login are done: JWT login, setup-code first login, admin creates caddies, role-based screens. Next: "I'm here" check-in and QueueService ordering - confirm the open points in docs/RULES.md first.
+Done: skeleton, login, GPS "I'm here" check-in with statuses, the nightly club list, today's line and the admin Singles/Doubles board (rules in docs/RULES.md).
+Next: assigning bags (call -> out on course -> back in, row-locked, audit logged), manual moves, and the notification when a caddie is called. Then the security fixes before real caddies use it.

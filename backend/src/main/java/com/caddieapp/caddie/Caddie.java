@@ -38,14 +38,27 @@ public class Caddie {
     @Column(name = "is_priority", nullable = false)
     private boolean priority;
 
+    /** 1 = top of the club list. Only changed by the nightly recalculation and by admins. */
+    @Column(name = "list_position", nullable = false)
+    private int listPosition;
+
     protected Caddie() {
         // for JPA
     }
 
-    public Caddie(User user, Grade grade, boolean priority) {
+    public Caddie(User user, Grade grade, boolean priority, int listPosition) {
         this.user = user;
         this.grade = grade;
         this.priority = priority;
+        this.listPosition = listPosition;
+    }
+
+    public int getListPosition() {
+        return listPosition;
+    }
+
+    public void setListPosition(int listPosition) {
+        this.listPosition = listPosition;
     }
 
     public Long getId() {

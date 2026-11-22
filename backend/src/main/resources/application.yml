@@ -27,6 +27,14 @@ app:
     secret: ${JWT_SECRET:dev-only-secret-change-me-please-at-least-32-chars}
     expiry-days: 90   # caddies "log in once and stay logged in"
   timezone: Europe/Dublin
+  # "I'm here" only works inside this circle. Set here on purpose so admins can't change it.
+  # TODO: put in the club's real coordinates (e.g. the caddie shack - right-click it in Google
+  # Maps to copy them), then set require-location to true.
+  check-in:
+    require-location: ${CHECKIN_REQUIRE_LOCATION:false}
+    latitude: 53.0
+    longitude: -6.0
+    radius-meters: 400
   # First admin, created on start-up only if the database has no admin yet.
   # They must choose a new password on first login. Override all three in production.
   bootstrap-admin:
