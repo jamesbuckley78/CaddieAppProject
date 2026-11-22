@@ -1,0 +1,25 @@
+{
+  "expo": {
+    "name": "Caddie List",
+    "slug": "caddie-list",
+    "scheme": "caddielist",
+    "version": "0.1.0",
+    "orientation": "default",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.caddieapp.mobile"
+    },
+    "android": {
+      "package": "com.caddieapp.mobile"
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single"
+    },
+    "plugins": ["expo-router", "expo-secure-store"],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

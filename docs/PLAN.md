@@ -46,7 +46,7 @@ The club runs its caddie order from a manual list. People skip, nobody knows exa
 | loops | caddie_id, date, bag_type, tee_time, called_at, accepted_at, assigned_by |
 | absences | caddie_id, date, reason (nullable), submitted_at, approved |
 | issue_reports | caddie_id, type, hole, message, status |
-| audit_log | admin_id, action, before, after, timestamp |
+| audit_log | admin_id, action, before_state, after_state, created_at |
 
 ## Open questions - ask the caddie master (record answers in docs/RULES.md)
 1. Do priority caddies always go before everyone else, or only within their grade? Priority first, then everyone else(singles and doubles that are non priority go after)
@@ -76,4 +76,4 @@ CaddieAppProject/
 ```
 
 ## Next step
-Create `docker-compose.yml` (MySQL) and the Spring Boot project, then build login and the "I'm here" endpoint before any screens.
+Skeleton and login are done: JWT login, setup-code first login, admin creates caddies, role-based screens. Next: "I'm here" check-in and QueueService ordering - confirm the open points in docs/RULES.md first.

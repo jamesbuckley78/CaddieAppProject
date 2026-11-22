@@ -1,0 +1,28 @@
+# Local development database.
+# Start:  docker compose up -d
+# Stop:   docker compose down        (data is kept in the "mysql-data" volume)
+# Wipe:   docker compose down -v     (deletes all data)
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: caddie-mysql
+    restart: unless-stopped
+    environment:
+      # Values come from .env; the defaults after ":-" match .env.example and application.yml
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-change-me-root}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-caddie}
+      MYSQL_USER: ${MYSQL_USER:-caddie}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-change-me}
+      TZ: Europe/Dublin
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  mysql-data:
