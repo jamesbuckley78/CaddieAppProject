@@ -7,6 +7,7 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 import com.caddieapp.caddie.Caddie;
+import com.caddieapp.common.Enums.BagType;
 import com.caddieapp.common.Enums.QueueStatus;
 
 import jakarta.persistence.Column;
@@ -52,6 +53,22 @@ public class QueueEntry {
     /** "Will be back" estimate. Only set while status is BACK_LATER. */
     @Column(name = "back_at")
     private LocalDateTime backAt;
+
+    // While status is CALLED: which bag, when, and whether the caddie tapped "On my way"
+    @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
+    @Column(name = "called_bag_type", length = 10)
+    private BagType calledBagType;
+
+    @Column(name = "called_at")
+    private LocalDateTime calledAt;
+
+    @Column(name = "call_accepted_at")
+    private LocalDateTime callAcceptedAt;
+
+    /** Calls today they didn't answer ("missed opportunities"). They keep their place. */
+    @Column(name = "missed_calls", nullable = false)
+    private int missedCalls;
 
     protected QueueEntry() {
         // for JPA
@@ -106,5 +123,71 @@ public class QueueEntry {
     public void changeStatus(QueueStatus newStatus, LocalDateTime newBackAt) {
         this.status = newStatus;
         this.backAt = newBackAt;
+    }
+
+    public BagType getCalledBagType() {
+        return calledBagType;
+    }
+
+    public LocalDateTime getCalledAt() {
+        return calledAt;
+    }
+
+    public LocalDateTime getCallAcceptedAt() {
+        return callAcceptedAt;
+    }
+
+    public int getMissedCalls() {
+        return missedCalls;
+    }
+
+    /** Waiting in line (any of available / getting food / will be back) - can be called. */
+    public boolean isWaiting() {
+        return status == QueueStatus.AVAILABLE || status == QueueStatus.FOOD || status == QueueStatus.BACK_LATER;
+    }
+
+    /** Admin calls them for a bag. */
+    public void call(BagType bagType, LocalDateTime at) {
+        this.status = QueueStatus.CALLED;
+        this.calledBagType = bagType;
+        this.calledAt = at;
+        this.callAcceptedAt = null;
+        this.backAt = null;
+    }
+
+    /** Caddie tapped "On my way". */
+    public void acceptCall(LocalDateTime at) {
+        this.callAcceptedAt = at;
+    }
+
+    /** Admin sent them out on course. A manual move only holds until their next bag. */
+    public void sendOut() {
+        this.status = QueueStatus.OUT;
+        this.manualPosition = null;
+        clearCall();
+    }
+
+    /** Didn't reply: back to waiting, same place in line, one more missed call. */
+    public void missCall() {
+        this.status = QueueStatus.AVAILABLE;
+        this.missedCalls++;
+        clearCall();
+    }
+
+    /** Back from a loop. */
+    public void backIn() {
+        this.status = QueueStatus.AVAILABLE;
+        this.backAt = null;
+    }
+
+    /** Admin's manual place in today's line; null puts them back where the rules say. */
+    public void moveTo(Integer lineNumber) {
+        this.manualPosition = lineNumber;
+    }
+
+    private void clearCall() {
+        this.calledBagType = null;
+        this.calledAt = null;
+        this.callAcceptedAt = null;
     }
 }

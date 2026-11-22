@@ -49,6 +49,18 @@ public class User {
     @Column(name = "push_token")
     private String pushToken;
 
+    /** Which service the push token belongs to: "EXPO" now, "FCM" for a future Flutter app. */
+    @Column(name = "push_provider", length = 10)
+    private String pushProvider;
+
+    /** Goes up when the password changes or is reset, which cancels every older login token. */
+    @Column(name = "token_version", nullable = false)
+    private int tokenVersion;
+
+    /** One-time setup codes stop working after this (null = no expiry, e.g. the first admin). */
+    @Column(name = "setup_code_expires_at")
+    private LocalDateTime setupCodeExpiresAt;
+
     @Column(name = "created_at", insertable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -96,19 +108,36 @@ public class User {
         return createdAt;
     }
 
+    public String getPushProvider() {
+        return pushProvider;
+    }
+
+    public int getTokenVersion() {
+        return tokenVersion;
+    }
+
+    public LocalDateTime getSetupCodeExpiresAt() {
+        return setupCodeExpiresAt;
+    }
+
     /** Replaces the setup code (or old password) with a new hash and clears the setup flag. */
     public void changePassword(String newPasswordHash) {
         this.passwordHash = newPasswordHash;
         this.mustChangePassword = false;
+        this.setupCodeExpiresAt = null;
+        this.tokenVersion++; // logs out every other device
     }
 
-    /** Admin reset (forgotten password): back to a one-time setup code. */
-    public void resetToSetupCode(String setupCodeHash) {
+    /** New account or forgotten password: a one-time setup code that expires. */
+    public void resetToSetupCode(String setupCodeHash, LocalDateTime expiresAt) {
         this.passwordHash = setupCodeHash;
         this.mustChangePassword = true;
+        this.setupCodeExpiresAt = expiresAt;
+        this.tokenVersion++;
     }
 
-    public void setPushToken(String pushToken) {
+    public void setPushToken(String provider, String pushToken) {
+        this.pushProvider = provider;
         this.pushToken = pushToken;
     }
 }

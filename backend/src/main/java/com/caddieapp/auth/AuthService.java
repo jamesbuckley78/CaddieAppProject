@@ -1,5 +1,8 @@
 package com.caddieapp.auth;
 
+import java.time.Clock;
+import java.time.LocalDateTime;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -20,27 +23,53 @@ public class AuthService {
     /** Same message for unknown phone and wrong password, so nobody can probe which numbers exist. */
     static final String BAD_LOGIN = "Wrong phone number or password";
 
+    static final String CODE_EXPIRED = "Your setup code has expired - ask the caddie master for a new one";
+
     private final UserRepository users;
     private final CaddieRepository caddies;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
+    private final LoginAttempts attempts;
+    private final Clock clock;
 
-    public AuthService(UserRepository users, CaddieRepository caddies,
-                       PasswordEncoder passwordEncoder, JwtService jwtService) {
+    public AuthService(UserRepository users, CaddieRepository caddies, PasswordEncoder passwordEncoder,
+                       JwtService jwtService, LoginAttempts attempts, Clock clock) {
         this.users = users;
         this.caddies = caddies;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
+        this.attempts = attempts;
+        this.clock = clock;
     }
 
-    /** Phone + password (or the one-time setup code) -> token. */
+    /**
+     * Phone + password (or the one-time setup code) -> token. Five wrong tries locks that phone
+     * number for 15 minutes (LoginAttempts); setup codes stop working after 48 hours.
+     */
     @Transactional(readOnly = true)
     public LoginResponse login(String phone, String password) {
-        User user = users.findByPhone(PhoneNumbers.normalise(phone))
+        String normalised = PhoneNumbers.normalise(phone);
+        attempts.checkAllowed(normalised);
+        User user = users.findByPhone(normalised)
             .filter(u -> u.getPasswordHash() != null)
             .filter(u -> passwordEncoder.matches(password, u.getPasswordHash()))
-            .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, BAD_LOGIN));
+            .orElse(null);
+        if (user == null) {
+            attempts.failed(normalised);
+            throw new ApiException(HttpStatus.UNAUTHORIZED, BAD_LOGIN);
+        }
+        LocalDateTime expires = user.getSetupCodeExpiresAt();
+        if (user.isMustChangePassword() && expires != null && LocalDateTime.now(clock).isAfter(expires)) {
+            throw new ApiException(HttpStatus.UNAUTHORIZED, CODE_EXPIRED);
+        }
+        attempts.succeeded(normalised);
         return new LoginResponse(jwtService.createToken(user), toResponse(user));
+    }
+
+    /** The app registers where to send push notifications ("EXPO" token from expo-notifications). */
+    @Transactional
+    public void savePushToken(long userId, String provider, String token) {
+        users.findById(userId).ifPresent(u -> u.setPushToken(provider, token));
     }
 
     /**

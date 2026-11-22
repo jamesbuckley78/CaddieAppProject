@@ -90,6 +90,42 @@ class QueueServiceTest {
     }
 
     @Nested
+    class ManualMoves {
+
+        private final List<Candidate> line = List.of(c(1, false, 0, 1), c(2, false, 0, 2), c(3, false, 0, 3),
+            c(4, false, 0, 4), c(5, false, 0, 5));
+
+        @Test
+        void movedCaddieLandsOnTheirChosenNumberAndOthersKeepTheirOrder() {
+            var moved = queueService.applyManualMoves(line, Map.of(5L, 2));
+
+            assertThat(ids(moved)).containsExactly(1L, 5L, 2L, 3L, 4L);
+        }
+
+        @Test
+        void movingDownWorksToo() {
+            assertThat(ids(queueService.applyManualMoves(line, Map.of(1L, 4)))).containsExactly(2L, 3L, 4L, 1L, 5L);
+        }
+
+        @Test
+        void twoMovesBothLandWhereTheAdminPutThem() {
+            var moved = queueService.applyManualMoves(line, Map.of(5L, 1, 4L, 3));
+
+            assertThat(ids(moved)).containsExactly(5L, 1L, 4L, 2L, 3L);
+        }
+
+        @Test
+        void numberPastTheEndGoesToTheEnd() {
+            assertThat(ids(queueService.applyManualMoves(line, Map.of(2L, 50)))).containsExactly(1L, 3L, 4L, 5L, 2L);
+        }
+
+        @Test
+        void noMovesLeavesTheLineAlone() {
+            assertThat(queueService.applyManualMoves(line, Map.of())).isSameAs(line);
+        }
+    }
+
+    @Nested
     class TodaysLine {
 
         @Test

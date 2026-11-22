@@ -21,6 +21,16 @@ export function checkOut() {
   return api.post<MyDay>('/availability/check-out');
 }
 
+/** After being called. */
+export function onMyWay() {
+  return api.post<MyDay>('/availability/on-my-way');
+}
+
+/** After a loop. */
+export function backIn() {
+  return api.post<MyDay>('/availability/back-in');
+}
+
 // Everyone: the club list table (order and bag figures update together daily at 4pm).
 export function fetchClubList() {
   return api.get<ClubList>('/queue/club-list');

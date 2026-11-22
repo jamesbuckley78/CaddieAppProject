@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 
+import com.caddieapp.common.Enums.BagType;
 import com.caddieapp.common.Enums.Grade;
 import com.caddieapp.common.Enums.QueueStatus;
 
@@ -23,7 +24,11 @@ public final class QueueDtos {
         Integer lineNumber,
         int bagsThisWeek,
         int clubPosition,
-        boolean locationRequired) {
+        boolean locationRequired,
+        /** Set while status is CALLED: which bag, when, and whether they tapped "On my way" */
+        BagType calledBagType,
+        Instant calledAt,
+        boolean callAccepted) {
     }
 
     /**
@@ -72,9 +77,21 @@ public final class QueueDtos {
         Instant checkedInAt,
         int bagsThisWeek,
         int clubPosition,
-        Integer lineNumber) {
+        Integer lineNumber,
+        /** Admin moved them by hand today (holds until their next bag) */
+        boolean moved,
+        int missedCalls,
+        /** While CALLED */
+        BagType calledBagType,
+        Instant calledAt,
+        boolean callAccepted,
+        /** While OUT: the bag they're carrying, so the admin can correct single/double */
+        Long currentLoopId,
+        BagType currentBagType,
+        Instant sentOutAt) {
     }
 
-    public record BoardResponse(LocalDate date, int totalBagsToday, List<BoardEntry> entries) {
+    /** @param awayToday caddies with an approved "not coming in" for today */
+    public record BoardResponse(LocalDate date, int totalBagsToday, List<BoardEntry> entries, List<String> awayToday) {
     }
 }

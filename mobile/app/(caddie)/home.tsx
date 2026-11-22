@@ -2,10 +2,10 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { getCurrentPosition } from '@/api/location';
-import { checkIn, checkOut, fetchMyDay, setStatus } from '@/api/queue';
+import { backIn, checkIn, checkOut, fetchMyDay, onMyWay, setStatus } from '@/api/queue';
 import { Button } from '@/components/Button';
 import { ErrorText } from '@/components/ErrorText';
-import { ordinal, statusText } from '@/components/format';
+import { clockTime, ordinal, statusText } from '@/components/format';
 import { Screen } from '@/components/Screen';
 import { colors } from '@/components/theme';
 import { useAuth } from '@/hooks/useAuth';
@@ -16,7 +16,8 @@ const BACK_IN_OPTIONS = [15, 30, 45, 60, 90];
 
 export default function CaddieHome() {
   const { user } = useAuth();
-  const { data: day, error: loadError, setData } = useLiveData(fetchMyDay, 15000);
+  // Every 10 s, so a call from the caddie master shows up quickly even without push
+  const { data: day, error: loadError, setData } = useLiveData(fetchMyDay, 10000);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [choosingTime, setChoosingTime] = useState(false);
@@ -70,19 +71,37 @@ export default function CaddieHome() {
           </Text>
           <Button label="I'm here - available" onPress={handleCheckIn} loading={busy} />
         </View>
+      ) : day.status === 'CALLED' ? (
+        // Called by the caddie master - the most important thing on screen
+        <View style={[styles.card, styles.calledCard]}>
+          <Text style={styles.big}>You're up!</Text>
+          <Text style={styles.calledText}>
+            {day.calledBagType === 'DOUBLE' ? 'A double' : 'A single'} - go to the caddie master.
+          </Text>
+          <Text style={styles.muted}>Called at {clockTime(day.calledAt)}</Text>
+          {day.callAccepted ? (
+            <Text style={styles.status}>The caddie master knows you're on your way.</Text>
+          ) : (
+            <Button label="On my way" onPress={() => run(onMyWay)} loading={busy} />
+          )}
+        </View>
       ) : (
         <View style={styles.card}>
           {/* The big number - only their own, never who else is here */}
           {day.status === 'OUT' ? (
-            <Text style={styles.big}>Out on course</Text>
+            <>
+              <Text style={styles.big}>Out on course</Text>
+              <Text style={styles.muted}>Tap when you're back and ready for another bag.</Text>
+              <Button label="Back in" onPress={() => run(backIn)} loading={busy} />
+            </>
           ) : (
             <Text style={styles.big}>
               You're {day.lineNumber ? ordinal(day.lineNumber) : '-'} in line
             </Text>
           )}
-          <Text style={styles.status}>{statusText(day.status, day.backAt)}</Text>
+          {day.status !== 'OUT' && <Text style={styles.status}>{statusText(day.status, day.backAt)}</Text>}
 
-          {day.status !== 'OUT' && day.status !== 'CALLED' && (
+          {day.status !== 'OUT' && (
             <>
               <View style={styles.row}>
                 <Choice label="Available" selected={day.status === 'AVAILABLE'} onPress={() => handleStatus('AVAILABLE')} />
@@ -142,6 +161,8 @@ function Stat({ value, label }: { value: number | string; label: string }) {
 }
 
 const styles = StyleSheet.create({
+  calledCard: { backgroundColor: colors.highlight, borderColor: '#b25a00', borderWidth: 2 },
+  calledText: { fontSize: 20, fontWeight: '600', color: colors.text },
   card: {
     backgroundColor: colors.card,
     borderWidth: 1,

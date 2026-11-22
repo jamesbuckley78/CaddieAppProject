@@ -56,4 +56,18 @@ public class AvailabilityController {
         availability.checkOut(user.id());
         return queries.myDay(user.id());
     }
+
+    /** After being called: "On my way". */
+    @PostMapping("/on-my-way")
+    public MyDayResponse onMyWay(@AuthenticationPrincipal AuthUser user) {
+        availability.acceptCall(user.id());
+        return queries.myDay(user.id());
+    }
+
+    /** After a loop: available again. */
+    @PostMapping("/back-in")
+    public MyDayResponse backIn(@AuthenticationPrincipal AuthUser user) {
+        availability.backIn(user.id());
+        return queries.myDay(user.id());
+    }
 }

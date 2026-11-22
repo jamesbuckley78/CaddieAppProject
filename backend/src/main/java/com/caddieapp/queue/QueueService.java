@@ -5,6 +5,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.temporal.TemporalAdjusters;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -57,6 +58,28 @@ public class QueueService {
      */
     public List<Candidate> todaysLine(Collection<Candidate> checkedIn) {
         return checkedIn.stream().sorted(ORDER).toList();
+    }
+
+    /**
+     * Applies the admin's manual moves to a line that's already in rule order: everyone else
+     * keeps their relative order, and each moved caddie is slotted in at their chosen line
+     * number (or the end, if the line is now shorter). A move holds until the caddie's next bag.
+     *
+     * @param manual caddie id -> line number the admin moved them to
+     */
+    public List<Candidate> applyManualMoves(List<Candidate> line, Map<Long, Integer> manual) {
+        if (manual.isEmpty()) {
+            return line;
+        }
+        List<Candidate> result = new ArrayList<>(line.stream().filter(c -> !manual.containsKey(c.caddieId())).toList());
+        line.stream()
+            .filter(c -> manual.containsKey(c.caddieId()))
+            .sorted(Comparator.comparingInt((Candidate c) -> manual.get(c.caddieId())))
+            .forEach(c -> {
+                int index = Math.max(0, Math.min(manual.get(c.caddieId()) - 1, result.size()));
+                result.add(index, c);
+            });
+        return result;
     }
 
     /**

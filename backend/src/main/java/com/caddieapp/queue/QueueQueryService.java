@@ -5,9 +5,12 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -16,15 +19,18 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.caddieapp.absence.AbsenceRepository;
 import com.caddieapp.availability.GeoFence;
 import com.caddieapp.availability.QueueEntry;
 import com.caddieapp.availability.QueueEntryRepository;
 import com.caddieapp.caddie.Caddie;
 import com.caddieapp.caddie.CaddieRepository;
-import com.caddieapp.common.Enums.Grade;
 import com.caddieapp.common.ApiException;
+import com.caddieapp.common.Enums.Grade;
 import com.caddieapp.common.Enums.QueueStatus;
 import com.caddieapp.loop.BagCounts;
+import com.caddieapp.loop.Loop;
+import com.caddieapp.loop.LoopRepository;
 import com.caddieapp.queue.QueueDtos.BoardEntry;
 import com.caddieapp.queue.QueueDtos.BoardResponse;
 import com.caddieapp.queue.ClubListSnapshots.Snapshot;
@@ -43,16 +49,21 @@ public class QueueQueryService {
     private final QueueService queueService;
     private final GeoFence geoFence;
     private final ClubListSnapshots snapshots;
+    private final LoopRepository loops;
+    private final AbsenceRepository absences;
     private final Clock clock;
     private final LocalTime clubListUpdateTime;
 
     public QueueQueryService(CaddieRepository caddies, QueueEntryRepository entries, BagCounts bagCounts,
                              QueueService queueService, GeoFence geoFence, ClubListSnapshots snapshots,
-                             Clock clock, @Value("${app.club-list.daily-update-time}") String clubListUpdateTime) {
+                             LoopRepository loops, AbsenceRepository absences, Clock clock,
+                             @Value("${app.club-list.daily-update-time}") String clubListUpdateTime) {
         this.caddies = caddies;
         this.entries = entries;
         this.bagCounts = bagCounts;
         this.snapshots = snapshots;
+        this.loops = loops;
+        this.absences = absences;
         this.queueService = queueService;
         this.geoFence = geoFence;
         this.clock = clock;
@@ -71,13 +82,20 @@ public class QueueQueryService {
             .filter(QueueEntry::isCheckedIn)
             .collect(Collectors.toMap(e -> e.getCaddie().getId(), Function.identity()));
 
-        List<Candidate> line = queueService.todaysLine(checkedIn.values().stream()
+        List<Candidate> sorted = queueService.todaysLine(checkedIn.values().stream()
             .map(e -> candidate(e.getCaddie(), bags))
             .toList());
-        // Out on course = not waiting in line, so no number
-        Map<Long, Integer> numbers = queueService.lineNumbers(line,
-            c -> checkedIn.get(c.caddieId()).getStatus() == QueueStatus.OUT);
+        // Waiting caddies (with the admin's manual moves applied) get numbers; out on course don't
+        Predicate<Candidate> out = c -> checkedIn.get(c.caddieId()).getStatus() == QueueStatus.OUT;
+        Map<Long, Integer> manual = new HashMap<>();
+        checkedIn.values().stream()
+            .filter(e -> e.getManualPosition() != null && e.getStatus() != QueueStatus.OUT)
+            .forEach(e -> manual.put(e.getCaddie().getId(), e.getManualPosition()));
+        List<Candidate> line = new ArrayList<>(queueService.applyManualMoves(
+            sorted.stream().filter(out.negate()).toList(), manual));
+        line.addAll(sorted.stream().filter(out).toList());
 
+        Map<Long, Integer> numbers = queueService.lineNumbers(line, out);
         List<QueueEntry> ordered = line.stream().map(c -> checkedIn.get(c.caddieId())).toList();
         return new Today(date, ordered, bags, numbers, bagCounts.total(date));
     }
@@ -104,7 +122,10 @@ public class QueueQueryService {
             today.lineNumbers().get(caddie.getId()),
             today.bags().getOrDefault(caddie.getId(), 0),
             caddie.getListPosition(),
-            geoFence.isRequired());
+            geoFence.isRequired(),
+            mine == null ? null : mine.getCalledBagType(),
+            mine == null ? null : toInstant(mine.getCalledAt()),
+            mine != null && mine.getCallAcceptedAt() != null);
     }
 
     /**
@@ -146,16 +167,31 @@ public class QueueQueryService {
     @Transactional(readOnly = true)
     public BoardResponse board() {
         Today today = today();
+        // The bag each caddie out on course is carrying (so the admin can correct it)
+        Map<Long, Loop> outNow = new HashMap<>();
+        loops.findByDateAndReturnedAtIsNull(today.date()).forEach(l -> outNow.put(l.getCaddie().getId(), l));
+
         List<BoardEntry> rows = today.line().stream()
             .map(e -> {
                 Caddie c = e.getCaddie();
+                Loop loop = e.getStatus() == QueueStatus.OUT ? outNow.get(c.getId()) : null;
                 return new BoardEntry(c.getId(), c.getUser().getName(), c.getGrade(), c.isPriority(),
                     e.getStatus(), toInstant(e.getBackAt()), toInstant(e.getCheckedInAt()),
                     today.bags().getOrDefault(c.getId(), 0), c.getListPosition(),
-                    today.lineNumbers().get(c.getId()));
+                    today.lineNumbers().get(c.getId()),
+                    e.getManualPosition() != null, e.getMissedCalls(),
+                    e.getCalledBagType(), toInstant(e.getCalledAt()), e.getCallAcceptedAt() != null,
+                    loop == null ? null : loop.getId(), loop == null ? null : loop.getBagType(),
+                    loop == null ? null : toInstant(loop.getSentOutAt()));
             })
             .toList();
-        return new BoardResponse(today.date(), today.totalBags(), rows);
+        return new BoardResponse(today.date(), today.totalBags(), rows, absences.approvedNamesOn(today.date()));
+    }
+
+    /** Today's line number for one caddie, or null (for the audit log when moving). */
+    @Transactional(readOnly = true)
+    public Integer lineNumberOf(long caddieId) {
+        return today().lineNumbers().get(caddieId);
     }
 
     private Instant toInstant(LocalDateTime time) {
