@@ -76,4 +76,4 @@ CaddieAppProject/
 ```
 
 ## Next step
-Skeleton is in place (docker-compose MySQL, Spring Boot project with the V1 schema, Expo app with placeholder screens). Next: build login (JWT) and the "I'm here" endpoint before filling in any screens.
+Skeleton and login are done: JWT login, setup-code first login, admin creates caddies, role-based screens. Next: "I'm here" check-in and QueueService ordering - confirm the open points in docs/RULES.md first.

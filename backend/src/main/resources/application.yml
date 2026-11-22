@@ -27,3 +27,9 @@ app:
     secret: ${JWT_SECRET:dev-only-secret-change-me-please-at-least-32-chars}
     expiry-days: 90   # caddies "log in once and stay logged in"
   timezone: Europe/Dublin
+  # First admin, created on start-up only if the database has no admin yet.
+  # They must choose a new password on first login. Override all three in production.
+  bootstrap-admin:
+    name: ${BOOTSTRAP_ADMIN_NAME:Caddie Master}
+    phone: ${BOOTSTRAP_ADMIN_PHONE:0870000000}
+    password: ${BOOTSTRAP_ADMIN_PASSWORD:admin1234}

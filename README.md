@@ -34,3 +34,13 @@ Database changes go in `backend/src/main/resources/db/migration/` as new `V2__..
    npx expo start
    ```
    Press `a` for the Android emulator, `w` for web, or scan the QR code with Expo Go.
+
+## Logging in (development)
+- The first admin is created automatically when the backend starts with no admin in the database: phone **087 000 0000**, password **admin1234**. You'll be asked to choose a new password straight away.
+- As admin, open **Caddies**, add a caddie, and note the 6-digit setup code shown.
+- Log out, then log in with the caddie's phone number and that code. They choose a password and land on their **Today** screen.
+- Forgot a password? Admin taps **New code** next to the caddie.
+- Locked yourself out of the admin account? Clear the users and restart the backend (it recreates the default admin):
+  ```bash
+  docker exec caddie-mysql mysql -ucaddie -pchange-me caddie -e "DELETE FROM caddies; DELETE FROM users;"
+  ```
