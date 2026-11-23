@@ -123,7 +123,8 @@ public class AvailabilityService {
     }
 
     private QueueEntry todaysEntry(Caddie caddie) {
-        return entries.findByDateAndCaddieId(LocalDate.now(clock), caddie.getId())
+        // Locked like the admin's board actions, so a status tap can't overwrite a call or no-reply made at the same moment
+        return entries.findForUpdate(LocalDate.now(clock), caddie.getId())
             .filter(QueueEntry::isCheckedIn)
             .orElseThrow(() -> new ApiException(HttpStatus.CONFLICT, "Tap \"I'm here\" first"));
     }

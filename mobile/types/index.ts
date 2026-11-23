@@ -35,8 +35,29 @@ export interface Caddie {
   phone: string;
   grade: Grade;
   priority: boolean;
-  listPosition: number;
+  listPosition: number; // 0 once they've left
   passwordSet: boolean;
+  active: boolean; // false = left the club
+}
+
+export interface CaddieEdit {
+  name: string;
+  phone: string;
+  grade: Grade;
+  priority: boolean;
+}
+
+/** A caddie master's account (Admins tab). */
+export interface Admin {
+  id: number;
+  name: string;
+  phone: string;
+  passwordSet: boolean;
+}
+
+export interface AdminWithSetupCode {
+  admin: Admin;
+  setupCode: string;
 }
 
 export interface CaddieWithSetupCode {
@@ -112,7 +133,10 @@ export interface BoardEntry {
   // While OUT: the bag they're carrying, so it can be corrected
   currentLoopId: number | null;
   currentBagType: BagType | null;
+  currentDoubleLoop: boolean; // marked as a double loop (counts twice)
   sentOutAt: string | null;
+  printPosition: number; // printed list: everyone numbered, out on course where they'll be when back
+  bagsByDay: number[]; // bags each day of Board.weekDays
 }
 
 export interface Board {
@@ -120,6 +144,8 @@ export interface Board {
   totalBagsToday: number;
   entries: BoardEntry[]; // already in today's line order
   awayToday: string[]; // names with an approved "not coming in" for today
+  openIssues: number; // issue reports waiting in the Inbox
+  weekDays: string[]; // Monday-Friday of this week (plus the weekend once it's here), for the printout
 }
 
 // ---- Not coming in (backend/.../absence) ----
@@ -146,18 +172,62 @@ export interface Inbox {
   recentlyDecided: Absence[];
 }
 
+// ---- Issue reports (backend/.../issue/IssueReports) ----
+export type IssueType = 'SLOW_PLAY' | 'RANGER' | 'GOLFER_PROBLEM' | 'GOLFER_GOING_IN' | 'MISSING_ITEM';
+
+export interface Issue {
+  id: number;
+  caddieName: string;
+  type: IssueType;
+  hole: number | null;
+  message: string | null;
+  createdAt: string;
+  resolved: boolean;
+  resolvedBy: string | null; // admin's name
+  resolvedAt: string | null;
+}
+
+/** Issue history for a week (weekStart set) or all time (weekStart null). */
+export interface IssueSummary {
+  weekStart: string | null;
+  total: number;
+  // Partial<...> = some keys may be missing: types nobody reported aren't listed
+  byType: Partial<Record<IssueType, number>>;
+  byCaddie: { caddieId: number; name: string; reports: number }[]; // most reports first
+  issues: Issue[]; // newest first (all time: newest 200)
+}
+
+// ---- Attendance (backend/.../availability/AttendanceReport) ----
+export interface AttendanceRow {
+  caddieId: number;
+  name: string;
+  grade: Grade;
+  priority: boolean;
+  checkedInAt: (string | null)[]; // one per day Mon-Sun; null = didn't come in
+  daysWorked: number;
+}
+
+export interface AttendanceWeek {
+  weekStart: string;
+  days: string[]; // Monday..Sunday
+  dayTotals: number[]; // caddies in each day
+  caddiesIn: number; // different caddies in at least once
+  rows: AttendanceRow[];
+}
+
 // ---- History (backend/.../loop/HistoryService) ----
 export interface HistoryLoop {
   id: number;
   date: string;
   bagType: BagType;
+  doubleLoop: boolean; // went round twice; counts twice
   sentOutAt: string | null;
   returnedAt: string | null;
 }
 
 export interface HistoryWeek {
   weekStart: string;
-  bags: number; // a double counts as 2
+  bags: number; // a double counts as 2, a double loop twice
   loops: number;
   daysWorked: number;
   loopRows: HistoryLoop[];

@@ -43,6 +43,12 @@ public class AuthController {
         return authService.me(user.id());
     }
 
+    /** Caddies: a fresh 90-day token. The app calls this on start-up instead of /me. */
+    @PostMapping("/renew")
+    public LoginResponse renew(@AuthenticationPrincipal AuthUser user) {
+        return authService.renew(user.id());
+    }
+
     /** provider: "EXPO" (this app) or later "FCM" (a Flutter app). */
     public record PushTokenRequest(
         @jakarta.validation.constraints.Pattern(regexp = "EXPO|FCM") String provider,

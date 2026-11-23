@@ -15,6 +15,7 @@ import com.caddieapp.caddie.CaddieRepository;
 import com.caddieapp.caddie.User;
 import com.caddieapp.caddie.UserRepository;
 import com.caddieapp.common.ApiException;
+import com.caddieapp.common.Enums.Role;
 import com.caddieapp.common.PhoneNumbers;
 
 @Service
@@ -31,6 +32,8 @@ public class AuthService {
     private final JwtService jwtService;
     private final LoginAttempts attempts;
     private final Clock clock;
+    /** Checked when the phone number has no account, so that answer takes as long as a wrong password. */
+    private final String dummyHash;
 
     public AuthService(UserRepository users, CaddieRepository caddies, PasswordEncoder passwordEncoder,
                        JwtService jwtService, LoginAttempts attempts, Clock clock) {
@@ -40,6 +43,7 @@ public class AuthService {
         this.jwtService = jwtService;
         this.attempts = attempts;
         this.clock = clock;
+        this.dummyHash = passwordEncoder.encode("no-such-account");
     }
 
     /**
@@ -51,10 +55,11 @@ public class AuthService {
         String normalised = PhoneNumbers.normalise(phone);
         attempts.checkAllowed(normalised);
         User user = users.findByPhone(normalised)
-            .filter(u -> u.getPasswordHash() != null)
-            .filter(u -> passwordEncoder.matches(password, u.getPasswordHash()))
+            .filter(u -> u.getPasswordHash() != null && u.isActive())
             .orElse(null);
-        if (user == null) {
+        // Always run one password check: answering unknown numbers faster would show which numbers have accounts
+        boolean matches = passwordEncoder.matches(password, user == null ? dummyHash : user.getPasswordHash());
+        if (user == null || !matches) {
             attempts.failed(normalised);
             throw new ApiException(HttpStatus.UNAUTHORIZED, BAD_LOGIN);
         }
@@ -66,10 +71,30 @@ public class AuthService {
         return new LoginResponse(jwtService.createToken(user), toResponse(user));
     }
 
-    /** The app registers where to send push notifications ("EXPO" token from expo-notifications). */
+    /**
+     * The app registers where to send push notifications ("EXPO" token from expo-notifications).
+     * The token belongs to the phone, so it's taken off anyone who used this phone before -
+     * otherwise their calls would still buzz it.
+     */
     @Transactional
     public void savePushToken(long userId, String provider, String token) {
+        users.clearPushTokenFromOthers(token, userId);
         users.findById(userId).ifPresent(u -> u.setPushToken(provider, token));
+    }
+
+    /**
+     * A fresh 90-day token, so a caddie who opens the app now and then never has to log in again
+     * ("log in once and stay logged in"). Admins aren't renewed: their 12-hour limit is on
+     * purpose, because the board may be on a shared PC.
+     */
+    @Transactional(readOnly = true)
+    public LoginResponse renew(long userId) {
+        User user = users.findById(userId)
+            .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "Account no longer exists"));
+        if (user.getRole() != Role.CADDIE) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "Admin logins aren't renewed - they last 12 hours");
+        }
+        return new LoginResponse(jwtService.createToken(user), toResponse(user));
     }
 
     /**

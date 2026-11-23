@@ -14,6 +14,7 @@ import com.caddieapp.audit.AuditLog;
 import com.caddieapp.availability.QueueEntry;
 import com.caddieapp.availability.QueueEntryRepository;
 import com.caddieapp.caddie.Caddie;
+import com.caddieapp.caddie.CaddieRepository;
 import com.caddieapp.caddie.UserRepository;
 import com.caddieapp.common.ApiException;
 import com.caddieapp.common.Enums.BagType;
@@ -34,15 +35,17 @@ public class AssignmentService {
     private final QueueEntryRepository entries;
     private final LoopRepository loops;
     private final UserRepository users;
+    private final CaddieRepository caddies;
     private final AuditLog audit;
     private final NotificationService notifications;
     private final Clock clock;
 
     public AssignmentService(QueueEntryRepository entries, LoopRepository loops, UserRepository users,
-                             AuditLog audit, NotificationService notifications, Clock clock) {
+                             CaddieRepository caddies, AuditLog audit, NotificationService notifications, Clock clock) {
         this.entries = entries;
         this.loops = loops;
         this.users = users;
+        this.caddies = caddies;
         this.audit = audit;
         this.notifications = notifications;
         this.clock = clock;
@@ -99,7 +102,7 @@ public class AssignmentService {
             throw new ApiException(HttpStatus.CONFLICT, name(entry) + " isn't out on course");
         }
         entry.backIn();
-        loops.findFirstByCaddieIdAndDateAndReturnedAtIsNullOrderByIdDesc(caddieId, entry.getDate())
+        loops.findFirstByCaddieIdAndDateAndSentOutAtIsNotNullAndReturnedAtIsNullOrderByIdDesc(caddieId, entry.getDate())
             .ifPresent(loop -> loop.markReturned(now()));
         if (adminId != null) {
             audit.record(adminId, "BACK_IN", state("caddie", name(entry), "status", QueueStatus.OUT),
@@ -117,6 +120,39 @@ public class AssignmentService {
         audit.record(adminId, "EDIT_BAG",
             state("caddie", loop.getCaddie().getUser().getName(), "loopId", loopId, "bag", before),
             state("bag", bagType));
+    }
+
+    /**
+     * Mark (or unmark) a double loop: round twice on the same bag. Up to the admin, usually not
+     * marked; when it is, the bag counts twice straight away (docs/RULES.md).
+     */
+    @Transactional
+    public void markDoubleLoop(long adminId, long loopId, boolean doubleLoop) {
+        Loop loop = loops.findById(loopId)
+            .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Bag not found"));
+        boolean before = loop.isDoubleLoop();
+        loop.markDoubleLoop(doubleLoop);
+        audit.record(adminId, "DOUBLE_LOOP",
+            state("caddie", loop.getCaddie().getUser().getName(), "loopId", loopId, "doubleLoop", before),
+            state("doubleLoop", doubleLoop));
+    }
+
+    /**
+     * A bag entered by hand (docs/RULES.md), e.g. carried by someone not yet on the list or who
+     * didn't check in. It counts like any other bag. It has no sent-out time, so it never shows
+     * as "out on course".
+     */
+    @Transactional
+    public void addBag(long adminId, long caddieId, LocalDate date, BagType bagType) {
+        if (date.isAfter(LocalDate.now(clock))) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "A bag can't be entered for a day that hasn't happened yet");
+        }
+        Caddie caddie = caddies.findById(caddieId)
+            .filter(c -> c.getUser().isActive())
+            .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Caddie not found"));
+        Loop loop = loops.save(new Loop(caddie, date, bagType, null, null, users.getReferenceById(adminId)));
+        audit.record(adminId, "ADD_BAG", state("caddie", caddie.getUser().getName()),
+            state("date", date.toString(), "bag", bagType, "loopId", loop.getId()));
     }
 
     /**

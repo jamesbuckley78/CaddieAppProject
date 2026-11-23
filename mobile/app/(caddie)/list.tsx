@@ -32,8 +32,9 @@ function whenLabel(countsUpTo: string) {
  * week total. Changes at most twice a day, so a slow refresh is plenty.
  */
 export default function ClubListScreen() {
-  const { data: list, error } = useLiveData(fetchClubList, 60000);
-  const { data: me } = useLiveData(fetchMyDay, 60000);
+  // The club list only changes at 4pm (or an admin move), so every 15 min plus each time the tab opens is enough
+  const { data: list, error } = useLiveData(fetchClubList, 15 * 60000);
+  const { data: me } = useLiveData(fetchMyDay, 15 * 60000);
 
   return (
     <Screen>

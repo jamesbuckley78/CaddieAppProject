@@ -91,7 +91,7 @@ public class ClubListRecalculation implements SchedulingConfigurer, ApplicationR
     public int recalculate(LocalDate day) {
         Integer moved = transaction.execute(status -> {
             long maxLoopId = bagCounts.maxLoopId();
-            List<Caddie> all = caddies.findClubList();
+            List<Caddie> all = caddies.findClubListForUpdate(); // locked: admins' moves wait for this
             Map<Long, Integer> bags = bagCounts.perCaddie(QueueService.weekStart(day), day, maxLoopId);
             Map<Long, Caddie> byId = all.stream().collect(Collectors.toMap(Caddie::getId, Function.identity()));
 

@@ -16,6 +16,7 @@ import com.caddieapp.auth.AuthUser;
 import com.caddieapp.caddie.CaddieDtos.CaddieResponse;
 import com.caddieapp.caddie.CaddieDtos.CaddieWithSetupCode;
 import com.caddieapp.caddie.CaddieDtos.CreateCaddieRequest;
+import com.caddieapp.caddie.CaddieDtos.EditCaddieRequest;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
@@ -48,6 +49,23 @@ public class CaddieAdminController {
     @PostMapping("/{id}/reset-code")
     public CaddieWithSetupCode resetSetupCode(@PathVariable long id) {
         return caddieService.resetSetupCode(id);
+    }
+
+    /** Name, phone, grade, priority (promote / demote). */
+    @PostMapping("/{id}/edit")
+    public CaddieResponse edit(@AuthenticationPrincipal AuthUser admin, @PathVariable long id,
+                               @Valid @RequestBody EditCaddieRequest request) {
+        return caddieService.edit(admin.id(), id, request);
+    }
+
+    @PostMapping("/{id}/left")
+    public CaddieResponse markLeft(@AuthenticationPrincipal AuthUser admin, @PathVariable long id) {
+        return caddieService.markLeft(admin.id(), id);
+    }
+
+    @PostMapping("/{id}/back")
+    public CaddieResponse bringBack(@AuthenticationPrincipal AuthUser admin, @PathVariable long id) {
+        return caddieService.bringBack(admin.id(), id);
     }
 
     /** Move on the club list, within the caddie's own group. */

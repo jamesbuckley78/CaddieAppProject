@@ -10,7 +10,7 @@ import org.springframework.stereotype.Repository;
 
 /**
  * Bag totals read straight from the loops table, so there is no separate counter that could
- * drift out of step. A double counts as 2 bags. Plain SQL (JdbcTemplate) because these are
+ * drift out of step. A double counts as 2 bags; a double loop counts twice. Plain SQL (JdbcTemplate) because these are
  * simple sums - no entity objects needed.
  *
  * `maxLoopId` limits a count to the loops that existed at a club list update (see
@@ -21,7 +21,9 @@ public class BagCounts {
 
     public static final long ALL_LOOPS = Long.MAX_VALUE;
 
-    private static final String BAGS = "CASE WHEN bag_type = 'DOUBLE' THEN 2 ELSE 1 END";
+    // Same rule as Loop.bags(): a double is 2 bags, and a double loop counts twice
+    private static final String BAGS =
+        "(CASE WHEN bag_type = 'DOUBLE' THEN 2 ELSE 1 END) * (CASE WHEN double_loop THEN 2 ELSE 1 END)";
 
     private final NamedParameterJdbcTemplate jdbc;
 

@@ -1,9 +1,10 @@
 package com.caddieapp.loop;
 
+import static com.caddieapp.common.ClubTime.toInstant;
+
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -26,7 +27,8 @@ import com.caddieapp.queue.QueueService;
 @Service
 public class HistoryService {
 
-    public record LoopRow(long id, LocalDate date, BagType bagType, Instant sentOutAt, Instant returnedAt) {
+    public record LoopRow(long id, LocalDate date, BagType bagType, boolean doubleLoop, Instant sentOutAt,
+                          Instant returnedAt) {
     }
 
     /** @param bags a double counts as 2 */
@@ -73,16 +75,12 @@ public class HistoryService {
                 LocalDate weekStart = e.getKey();
                 List<Loop> weekLoops = e.getValue();
                 int days = (int) worked.stream().filter(d -> QueueService.weekStart(d).equals(weekStart)).count();
-                return new Week(weekStart, weekLoops.stream().mapToInt(l -> l.getBagType().bags()).sum(),
+                return new Week(weekStart, weekLoops.stream().mapToInt(Loop::bags).sum(),
                     weekLoops.size(), days,
-                    weekLoops.stream().map(l -> new LoopRow(l.getId(), l.getDate(), l.getBagType(),
-                        toInstant(l.getSentOutAt()), toInstant(l.getReturnedAt()))).toList());
+                    weekLoops.stream().map(l -> new LoopRow(l.getId(), l.getDate(), l.getBagType(), l.isDoubleLoop(),
+                        toInstant(l.getSentOutAt(), clock), toInstant(l.getReturnedAt(), clock))).toList());
             })
             .toList();
         return new HistoryResponse(result.stream().mapToInt(Week::bags).sum(), worked.size(), result);
-    }
-
-    private Instant toInstant(LocalDateTime time) {
-        return time == null ? null : time.atZone(clock.getZone()).toInstant();
     }
 }

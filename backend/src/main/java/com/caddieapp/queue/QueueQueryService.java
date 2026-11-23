@@ -1,7 +1,8 @@
 package com.caddieapp.queue;
 
+import static com.caddieapp.common.ClubTime.toInstant;
+
 import java.time.Clock;
-import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -28,6 +29,7 @@ import com.caddieapp.caddie.CaddieRepository;
 import com.caddieapp.common.ApiException;
 import com.caddieapp.common.Enums.Grade;
 import com.caddieapp.common.Enums.QueueStatus;
+import com.caddieapp.issue.IssueReports;
 import com.caddieapp.loop.BagCounts;
 import com.caddieapp.loop.Loop;
 import com.caddieapp.loop.LoopRepository;
@@ -51,12 +53,13 @@ public class QueueQueryService {
     private final ClubListSnapshots snapshots;
     private final LoopRepository loops;
     private final AbsenceRepository absences;
+    private final IssueReports issues;
     private final Clock clock;
     private final LocalTime clubListUpdateTime;
 
     public QueueQueryService(CaddieRepository caddies, QueueEntryRepository entries, BagCounts bagCounts,
                              QueueService queueService, GeoFence geoFence, ClubListSnapshots snapshots,
-                             LoopRepository loops, AbsenceRepository absences, Clock clock,
+                             LoopRepository loops, AbsenceRepository absences, IssueReports issues, Clock clock,
                              @Value("${app.club-list.daily-update-time}") String clubListUpdateTime) {
         this.caddies = caddies;
         this.entries = entries;
@@ -64,6 +67,7 @@ public class QueueQueryService {
         this.snapshots = snapshots;
         this.loops = loops;
         this.absences = absences;
+        this.issues = issues;
         this.queueService = queueService;
         this.geoFence = geoFence;
         this.clock = clock;
@@ -72,7 +76,7 @@ public class QueueQueryService {
 
     /** Today's checked-in caddies in line order, with week-to-date bags (including today). */
     private record Today(LocalDate date, List<QueueEntry> line, Map<Long, Integer> bags,
-                         Map<Long, Integer> lineNumbers, int totalBags) {
+                         Map<Long, Integer> lineNumbers, Map<Long, Integer> printNumbers) {
     }
 
     private Today today() {
@@ -91,13 +95,17 @@ public class QueueQueryService {
         checkedIn.values().stream()
             .filter(e -> e.getManualPosition() != null && e.getStatus() != QueueStatus.OUT)
             .forEach(e -> manual.put(e.getCaddie().getId(), e.getManualPosition()));
-        List<Candidate> line = new ArrayList<>(queueService.applyManualMoves(
-            sorted.stream().filter(out.negate()).toList(), manual));
-        line.addAll(sorted.stream().filter(out).toList());
+        List<Candidate> waiting = queueService.applyManualMoves(sorted.stream().filter(out.negate()).toList(), manual);
+        List<Candidate> outOnCourse = sorted.stream().filter(out).toList();
+        List<Candidate> line = new ArrayList<>(waiting);
+        line.addAll(outOnCourse);
 
         Map<Long, Integer> numbers = queueService.lineNumbers(line, out);
+        // Printed list: everyone numbered, out on course slotted in where they'll be when back
+        Map<Long, Integer> printNumbers = queueService.lineNumbers(queueService.withOutOnCourse(waiting, outOnCourse),
+            c -> false);
         List<QueueEntry> ordered = line.stream().map(c -> checkedIn.get(c.caddieId())).toList();
-        return new Today(date, ordered, bags, numbers, bagCounts.total(date));
+        return new Today(date, ordered, bags, numbers, printNumbers);
     }
 
     private static Candidate candidate(Caddie caddie, Map<Long, Integer> bags) {
@@ -118,13 +126,13 @@ public class QueueQueryService {
             caddie.getId(),
             mine != null,
             mine == null ? QueueStatus.OFF : mine.getStatus(),
-            mine == null ? null : toInstant(mine.getBackAt()),
+            mine == null ? null : toInstant(mine.getBackAt(), clock),
             today.lineNumbers().get(caddie.getId()),
             today.bags().getOrDefault(caddie.getId(), 0),
             caddie.getListPosition(),
             geoFence.isRequired(),
             mine == null ? null : mine.getCalledBagType(),
-            mine == null ? null : toInstant(mine.getCalledAt()),
+            mine == null ? null : toInstant(mine.getCalledAt(), clock),
             mine != null && mine.getCallAcceptedAt() != null);
     }
 
@@ -169,32 +177,37 @@ public class QueueQueryService {
         Today today = today();
         // The bag each caddie out on course is carrying (so the admin can correct it)
         Map<Long, Loop> outNow = new HashMap<>();
-        loops.findByDateAndReturnedAtIsNull(today.date()).forEach(l -> outNow.put(l.getCaddie().getId(), l));
+        loops.findByDateAndSentOutAtIsNotNullAndReturnedAtIsNull(today.date()).forEach(l -> outNow.put(l.getCaddie().getId(), l));
+        // For the printed list: bags each day this week, Monday to Friday (plus the weekend once it's here)
+        LocalDate monday = QueueService.weekStart(today.date());
+        int lastDay = Math.max(4, today.date().getDayOfWeek().getValue() - 1);
+        List<LocalDate> weekDays = IntStream.rangeClosed(0, lastDay).mapToObj(monday::plusDays).toList();
+        Map<Long, Map<LocalDate, Integer>> bagsPerDay =
+            bagCounts.perCaddiePerDay(monday, today.date(), BagCounts.ALL_LOOPS);
 
         List<BoardEntry> rows = today.line().stream()
             .map(e -> {
                 Caddie c = e.getCaddie();
                 Loop loop = e.getStatus() == QueueStatus.OUT ? outNow.get(c.getId()) : null;
                 return new BoardEntry(c.getId(), c.getUser().getName(), c.getGrade(), c.isPriority(),
-                    e.getStatus(), toInstant(e.getBackAt()), toInstant(e.getCheckedInAt()),
+                    e.getStatus(), toInstant(e.getBackAt(), clock), toInstant(e.getCheckedInAt(), clock),
                     today.bags().getOrDefault(c.getId(), 0), c.getListPosition(),
                     today.lineNumbers().get(c.getId()),
                     e.getManualPosition() != null, e.getMissedCalls(),
-                    e.getCalledBagType(), toInstant(e.getCalledAt()), e.getCallAcceptedAt() != null,
-                    loop == null ? null : loop.getId(), loop == null ? null : loop.getBagType(),
-                    loop == null ? null : toInstant(loop.getSentOutAt()));
+                    e.getCalledBagType(), toInstant(e.getCalledAt(), clock), e.getCallAcceptedAt() != null,
+                    loop == null ? null : loop.getId(), loop == null ? null : loop.getBagType(), loop != null && loop.isDoubleLoop(),
+                    loop == null ? null : toInstant(loop.getSentOutAt(), clock),
+                    today.printNumbers().get(c.getId()),
+                    weekDays.stream().map(d -> bagsPerDay.getOrDefault(c.getId(), Map.of()).getOrDefault(d, 0)).toList());
             })
             .toList();
-        return new BoardResponse(today.date(), today.totalBags(), rows, absences.approvedNamesOn(today.date()));
+        return new BoardResponse(today.date(), bagCounts.total(today.date()), rows, absences.approvedNamesOn(today.date()),
+            issues.countOpen(), weekDays);
     }
 
     /** Today's line number for one caddie, or null (for the audit log when moving). */
     @Transactional(readOnly = true)
     public Integer lineNumberOf(long caddieId) {
         return today().lineNumbers().get(caddieId);
-    }
-
-    private Instant toInstant(LocalDateTime time) {
-        return time == null ? null : time.atZone(clock.getZone()).toInstant();
     }
 }

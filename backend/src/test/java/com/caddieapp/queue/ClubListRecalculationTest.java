@@ -54,7 +54,7 @@ class ClubListRecalculationTest {
     void reordersBySnapshotBagsAndSavesTheSnapshot() {
         Caddie a = caddie(1, false, 1);
         Caddie b = caddie(2, false, 2);
-        when(caddies.findClubList()).thenReturn(List.of(a, b));
+        when(caddies.findClubListForUpdate()).thenReturn(List.of(a, b));
         when(bagCounts.maxLoopId()).thenReturn(42L);
         LocalDate wednesday = LocalDate.of(2026, 11, 25);
         when(bagCounts.perCaddie(LocalDate.of(2026, 11, 23), wednesday, 42L)).thenReturn(Map.of(1L, 2));
@@ -75,7 +75,7 @@ class ClubListRecalculationTest {
     void startupCatchesUpWhenTodaysUpdateWasMissed() {
         when(snapshots.latest()).thenReturn(Optional.of(
             new Snapshot(LocalDate.of(2026, 11, 24).atTime(16, 0), LocalDate.of(2026, 11, 24), 10)));
-        when(caddies.findClubList()).thenReturn(List.of());
+        when(caddies.findClubListForUpdate()).thenReturn(List.of());
 
         job.run(null); // it's 16:00 Wednesday and the last update was Tuesday
 

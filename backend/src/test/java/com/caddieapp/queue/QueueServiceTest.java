@@ -137,6 +137,35 @@ class QueueServiceTest {
         }
 
         @Test
+        void printedListSlotsCaddieOutOnCourseWhereTheyWillBeWhenBack() {
+            // waiting: 2 (0 bags), 3 (1 bag). Caddie 1 is out on their first bag (1 bag, club list 1).
+            var waiting = List.of(c(2, false, 0, 2), c(3, false, 1, 3));
+
+            var printed = queueService.withOutOnCourse(waiting, List.of(c(1, false, 1, 1)));
+
+            assertThat(ids(printed)).containsExactly(2L, 1L, 3L); // ties on bags: club list position
+        }
+
+        @Test
+        void printedListKeepsManualMovesAndPutsBusiestCaddieOutLast() {
+            // 3 was moved to the top by hand; 4 is out on their third bag
+            var waiting = List.of(c(3, false, 1, 3), c(2, false, 0, 2));
+
+            var printed = queueService.withOutOnCourse(waiting, List.of(c(4, false, 3, 4)));
+
+            assertThat(ids(printed)).containsExactly(3L, 2L, 4L);
+        }
+
+        @Test
+        void printedListKeepsJuniorsOutOnCourseAmongTheJuniors() {
+            var waiting = List.of(c(1, false, 2, 1), junior(5, 1, 5));
+
+            var printed = queueService.withOutOnCourse(waiting, List.of(junior(6, 1, 6), c(2, false, 1, 2)));
+
+            assertThat(ids(printed)).containsExactly(2L, 1L, 5L, 6L);
+        }
+
+        @Test
         void lineNumbersSkipCaddiesOutOnCourse() {
             var line = queueService.todaysLine(List.of(c(1, true, 0, 1), c(2, false, 0, 2), c(3, false, 0, 3)));
 

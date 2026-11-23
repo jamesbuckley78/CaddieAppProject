@@ -15,3 +15,8 @@ export function setPassword(newPassword: string) {
 export function fetchMe() {
   return api.get<User>('/auth/me');
 }
+
+/** Caddies only: a fresh 90-day login, so they never have to log in again while they use the app. */
+export function renewLogin() {
+  return api.post<LoginResponse>('/auth/renew');
+}

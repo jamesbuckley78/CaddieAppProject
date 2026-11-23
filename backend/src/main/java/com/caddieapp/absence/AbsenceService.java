@@ -1,5 +1,6 @@
 package com.caddieapp.absence;
 
+import static com.caddieapp.common.ClubTime.toInstant;
 import static com.caddieapp.audit.AuditLog.state;
 
 import java.time.Clock;
@@ -131,10 +132,6 @@ public class AbsenceService {
     private AbsenceResponse toResponse(Absence a) {
         Status status = a.getApproved() == null ? Status.PENDING : a.getApproved() ? Status.APPROVED : Status.REJECTED;
         return new AbsenceResponse(a.getId(), a.getCaddie().getId(), a.getCaddie().getUser().getName(), a.getDate(),
-            a.getReason(), status, toInstant(a.getSubmittedAt()), toInstant(a.getDecidedAt()));
-    }
-
-    private Instant toInstant(LocalDateTime time) {
-        return time == null ? null : time.atZone(clock.getZone()).toInstant();
+            a.getReason(), status, toInstant(a.getSubmittedAt(), clock), toInstant(a.getDecidedAt(), clock));
     }
 }

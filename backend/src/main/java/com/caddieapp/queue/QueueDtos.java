@@ -88,10 +88,20 @@ public final class QueueDtos {
         /** While OUT: the bag they're carrying, so the admin can correct single/double */
         Long currentLoopId,
         BagType currentBagType,
-        Instant sentOutAt) {
+        /** the admin marked it a double loop (counts twice) */
+        boolean currentDoubleLoop,
+        Instant sentOutAt,
+        /** Place on the printed list: everyone numbered, out on course where they'll be when back */
+        int printPosition,
+        /** Bags each day of BoardResponse.weekDays (a double counts as 2) */
+        List<Integer> bagsByDay) {
     }
 
     /** @param awayToday caddies with an approved "not coming in" for today */
-    public record BoardResponse(LocalDate date, int totalBagsToday, List<BoardEntry> entries, List<String> awayToday) {
+    public record BoardResponse(LocalDate date, int totalBagsToday, List<BoardEntry> entries, List<String> awayToday,
+                                /** issue reports nobody has resolved yet (banner on the board) */
+                                int openIssues,
+                                /** Monday to Friday of this week, plus Saturday/Sunday once they've come */
+                                List<LocalDate> weekDays) {
     }
 }

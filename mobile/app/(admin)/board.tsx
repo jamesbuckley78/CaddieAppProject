@@ -1,11 +1,14 @@
-import { useState } from 'react';
+import { Link } from 'expo-router';
+import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 
-import { adminBackIn, callCaddie, changeBagType, moveInLine, noReply, sendOut } from '@/api/board';
+import { adminBackIn, callCaddie, changeBagType, markDoubleLoop, moveInLine, noReply, sendOut } from '@/api/board';
 import { fetchBoard } from '@/api/queue';
+import { canPrint, loadBoardCopy, printableHtml, saveBoardCopy } from '@/components/boardBackup';
 import { Button } from '@/components/Button';
 import { CaddieTag } from '@/components/CaddieTag';
 import { ErrorText } from '@/components/ErrorText';
+import { PrintPreview } from '@/components/PrintPreview';
 import { clockTime, statusText } from '@/components/format';
 import { Screen } from '@/components/Screen';
 import { colors } from '@/components/theme';
@@ -21,7 +24,20 @@ export default function AdminBoard() {
   const { width } = useWindowDimensions();
   const narrow = width < 760;
 
-  const { data: board, error, setData } = useLiveData(fetchBoard, 10000);
+  const { data: live, error, setData } = useLiveData(fetchBoard, 10000);
+  // The copy saved in this browser last time (web only). useState(() => ...) reads it once,
+  // when the screen first opens, rather than on every re-draw.
+  const [saved] = useState(loadBoardCopy);
+  // Offline straight after a page reload: show the saved copy until the server answers
+  const board = live ?? (error ? saved?.board : null) ?? null;
+  const showingSaved = !live && board !== null;
+  // The printable page while the preview is open; null = closed
+  const [previewHtml, setPreviewHtml] = useState<string | null>(null);
+
+  // Save every fresh board, so there's always a recent copy to fall back on and print
+  useEffect(() => {
+    if (live) saveBoardCopy(live);
+  }, [live]);
   const [tab, setTab] = useState<TableKey>('SINGLES');
   // Record<K, V> = an object with one V per key - here how many rows each table shows
   const [limits, setLimits] = useState<Record<TableKey, number>>({ SINGLES: PAGE, DOUBLES: PAGE, OUT: PAGE });
@@ -71,6 +87,20 @@ export default function AdminBoard() {
 
   return (
     <Screen>
+      {previewHtml && <PrintPreview html={previewHtml} onClose={() => setPreviewHtml(null)} />}
+      {showingSaved && saved && (
+        <Text style={styles.offline}>
+          Can't reach the server - showing the list saved at {clockTime(saved.savedAt)}. Print it if you need to work
+          from paper.
+        </Text>
+      )}
+      {board && board.openIssues > 0 && (
+        // Link = a tappable route change (expo-router), here to the Inbox tab
+        <Link href="/inbox" style={styles.issues}>
+          {board.openIssues} open {board.openIssues === 1 ? 'issue' : 'issues'} from caddies - tap to see them in the
+          Inbox
+        </Link>
+      )}
       <View style={styles.summary}>
         <Text style={styles.summaryText}>{board?.totalBagsToday ?? 0} bags today</Text>
         <Text style={styles.muted}>
@@ -78,6 +108,18 @@ export default function AdminBoard() {
         </Text>
         {board && board.awayToday.length > 0 && (
           <Text style={styles.muted}>Off today (approved): {board.awayToday.join(', ')}</Text>
+        )}
+        {canPrint && board && (
+          <View style={styles.printRow}>
+            <Button
+              label="Print preview"
+              variant="secondary"
+              onPress={() => {
+                const asOf = showingSaved && saved ? saved.savedAt : new Date().toISOString();
+                setPreviewHtml(printableHtml(board, asOf));
+              }}
+            />
+          </View>
         )}
       </View>
       <ErrorText message={error ?? actionError} />
@@ -200,7 +242,7 @@ function detailLine(e: BoardEntry) {
     return `${bag} · called ${clockTime(e.calledAt)} · ${e.callAccepted ? 'on the way' : 'waiting for reply'}`;
   }
   if (e.status === 'OUT') {
-    const bag = e.currentBagType === 'DOUBLE' ? 'Double' : 'Single';
+    const bag = (e.currentBagType === 'DOUBLE' ? 'Double' : 'Single') + (e.currentDoubleLoop ? ' · double loop' : '');
     return `${bag} · out since ${clockTime(e.sentOutAt)} · ${e.bagsThisWeek} this week`;
   }
   return `${e.bagsThisWeek} ${e.bagsThisWeek === 1 ? 'bag' : 'bags'} this week · in since ${clockTime(e.checkedInAt)}`;
@@ -229,6 +271,14 @@ function RowActions({ entry, kind, busy, act }: Omit<RowProps, 'open' | 'onToggl
             label={`Was a ${other === 'DOUBLE' ? 'double' : 'single'}`}
             variant="secondary"
             onPress={() => act(() => changeBagType(entry.currentLoopId!, other))}
+            disabled={busy}
+          />
+        )}
+        {entry.currentLoopId != null && (
+          <Button
+            label={entry.currentDoubleLoop ? 'Not a double loop' : 'Double loop'}
+            variant="secondary"
+            onPress={() => act(() => markDoubleLoop(entry.currentLoopId!, !entry.currentDoubleLoop))}
             disabled={busy}
           />
         )}
@@ -279,6 +329,9 @@ function RowActions({ entry, kind, busy, act }: Omit<RowProps, 'open' | 'onToggl
 const styles = StyleSheet.create({
   summary: { gap: 2 },
   summaryText: { fontSize: 20, fontWeight: '700', color: colors.text },
+  printRow: { flexDirection: 'row', marginTop: 6 },
+  offline: { backgroundColor: colors.highlight, color: colors.text, padding: 10, borderRadius: 8, fontWeight: '600' },
+  issues: { backgroundColor: colors.danger, color: '#fff', padding: 10, borderRadius: 8, fontWeight: '700' },
   muted: { color: colors.muted, fontSize: 13 },
   segments: { flexDirection: 'row', backgroundColor: colors.card, borderRadius: 8, borderWidth: 1, borderColor: colors.border },
   segment: { flex: 1, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 8 },

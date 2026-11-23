@@ -1,0 +1,19 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "backend",
+      "runtimeExecutable": "C:\\Program Files\\JetBrains\\IntelliJ IDEA 2025.3.2\\plugins\\maven\\lib\\maven3\\bin\\mvn.cmd",
+      "runtimeArgs": ["-q", "-f", "backend/pom.xml", "spring-boot:run"],
+      "port": 8080
+    },
+    {
+      "name": "web",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["expo", "start", "--port", "8081", "--offline"],
+      "cwd": "mobile",
+      "env": { "EXPO_PUBLIC_API_URL": "http://localhost:8080/api" },
+      "port": 8081
+    }
+  ]
+}

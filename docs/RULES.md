@@ -56,6 +56,30 @@ Who gets called next today. Only caddies who checked in today appear, ordered by
 - **On the club list** (Caddies tab): move a caddie to another position, e.g. 70 -> 50 after a mistake, but only **within their own group** (priority / other adults / juniors). It holds until the next 4pm update re-sorts by bags.
 - Every move, call, send-out, no-reply, bag correction and absence decision goes in the audit log (`audit_log`).
 
+## Printed list
+- The board's **Print preview** prints one table of everyone checked in, numbered in order.
+- Caddies out on course are included, **placed where they're expected to be once they're back** (their bags already include the one they're carrying), instead of in a separate table.
+- Each row: the coloured P/S/D/J letter beside the name, bags for each day of the week so far (M T W T F, plus the weekend once it's here; later days blank), and the week total. A Total row adds up each day. The letters are coloured as in the app: P red, S blue, D orange, J grey.
+
+## Changing a caddie's details or group
+- The admin can correct a name or phone number, or change grade and priority (promote / demote, or a junior becoming an adult) from the Caddies tab.
+- Someone who **changes group** goes to the **top of their new group**, like a new caddie. The next 4pm update then sorts them by bags within it. Changing only the name, phone, or single/double (same group) keeps their place.
+
+## Leaving and coming back
+- **Mark as left**: off the club list (everyone below moves up one), logged out and can't log in. Their bags, history and audit entries are kept.
+- **Bring back**: top of their group, like a new caddie. Their old password works again.
+- Admins who leave are removed the same way (Admins tab); an admin can't remove their own account, so there's always one left.
+
+## Double loop
+- A **double loop** = going round twice (36 holes) on the same bag. It usually isn't marked; it's up to the admin.
+- The admin marks it on the board while the caddie is out on course (**Double loop**, tap again to undo). A marked loop **counts twice**: a single on a double loop = 2 bags, a double bag = 4.
+- It shows on the board, in the caddie's history, and goes in the audit log.
+
+## Bags entered by hand
+- The admin can enter a single or double for any caddie on the list, for today or an earlier day (Caddies tab -> Add a bag), e.g. someone not yet on the list or who didn't check in.
+- It counts straight away in today's line, and in the club list from the next 4pm update (same as any bag).
+- It never shows as "out on course".
+
 ## Not coming in
 - A caddie picks a date at least **24 hours before the start of that day** (`app.absence.min-notice-hours`), with an optional reason. One request per day.
 - The admin approves or rejects it in the **Inbox**. The caddie sees the answer and can withdraw a request until it's answered.

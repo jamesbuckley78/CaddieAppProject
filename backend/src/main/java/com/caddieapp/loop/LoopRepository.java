@@ -11,10 +11,11 @@ import org.springframework.data.repository.query.Param;
 public interface LoopRepository extends JpaRepository<Loop, Long> {
 
     /** The loop a caddie is out on right now (sent out today, not back yet). */
-    Optional<Loop> findFirstByCaddieIdAndDateAndReturnedAtIsNullOrderByIdDesc(Long caddieId, LocalDate date);
+    Optional<Loop> findFirstByCaddieIdAndDateAndSentOutAtIsNotNullAndReturnedAtIsNullOrderByIdDesc(Long caddieId,
+                                                                                                 LocalDate date);
 
     /** Everyone out on course on a day (sent out, not back yet). */
-    List<Loop> findByDateAndReturnedAtIsNull(LocalDate date);
+    List<Loop> findByDateAndSentOutAtIsNotNullAndReturnedAtIsNull(LocalDate date);
 
     /** A caddie's loops between two dates, newest first - for their history. */
     @Query("select l from Loop l where l.caddie.id = :caddieId and l.date between :from and :to "

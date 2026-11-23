@@ -1,5 +1,6 @@
 import { Redirect, Tabs } from 'expo-router';
 
+import { ClubCrest } from '@/components/branding';
 import { SignOutButton } from '@/components/SignOutButton';
 import { colors } from '@/components/theme';
 import { useAuth } from '@/hooks/useAuth';
@@ -18,6 +19,7 @@ export default function CaddieLayout() {
   return (
     <Tabs
       screenOptions={{
+        headerLeft: () => <ClubCrest />,
         headerRight: () => <SignOutButton />,
         tabBarActiveTintColor: colors.primary,
         tabBarIconStyle: { display: 'none' }, // no icons yet - hides the placeholder arrows
