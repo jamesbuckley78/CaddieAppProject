@@ -76,4 +76,10 @@ public class Caddie {
     public boolean isPriority() {
         return priority;
     }
+
+    /** Promote / demote, or a junior becoming an adult. The caller re-places them on the list. */
+    public void changeGrade(Grade grade, boolean priority) {
+        this.grade = grade;
+        this.priority = priority;
+    }
 }

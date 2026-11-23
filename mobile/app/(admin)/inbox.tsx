@@ -2,18 +2,23 @@ import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { decideAbsence, fetchInbox } from '@/api/absences';
+import { fetchOpenIssues, resolveIssue } from '@/api/issues';
 import { Button } from '@/components/Button';
 import { ErrorText } from '@/components/ErrorText';
-import { dayLabel } from '@/components/format';
+import { clockTime, dayLabel, ISSUE_LABEL } from '@/components/format';
+import { IssueHistory } from '@/components/IssueHistory';
 import { Screen } from '@/components/Screen';
 import { colors } from '@/components/theme';
 import { useLiveData } from '@/hooks/useLiveData';
 
-/** "Not coming in" requests to approve or reject. Issue reports will join them here later. */
+/** Issue reports from caddies to deal with, and "not coming in" requests to approve or reject. */
 export default function InboxScreen() {
   const { data: inbox, error: loadError, reload } = useLiveData(fetchInbox, 30000);
+  const { data: issues, error: issuesError, reload: reloadIssues } = useLiveData(fetchOpenIssues, 15000);
   const [busyId, setBusyId] = useState<number | null>(null);
+  const [busyIssue, setBusyIssue] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [resolvedCount, setResolvedCount] = useState(0); // goes up on each resolve, so the history reloads
 
   async function decide(id: number, approve: boolean) {
     setError(null);
@@ -28,9 +33,42 @@ export default function InboxScreen() {
     }
   }
 
+  async function resolve(id: number) {
+    setError(null);
+    setBusyIssue(id);
+    try {
+      await resolveIssue(id);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not save'); // e.g. another admin resolved it first
+    } finally {
+      setBusyIssue(null);
+      setResolvedCount((n) => n + 1);
+      await reloadIssues();
+    }
+  }
+
   return (
     <Screen title="Inbox">
-      <ErrorText message={loadError ?? error} />
+      <ErrorText message={loadError ?? issuesError ?? error} />
+
+      <Text style={styles.heading}>Issues from caddies ({issues?.length ?? 0})</Text>
+      {issues && issues.length === 0 && <Text style={styles.muted}>No open issues.</Text>}
+      {issues?.map((i) => (
+        <View key={i.id} style={[styles.card, styles.issue]}>
+          <Text style={styles.name}>
+            {ISSUE_LABEL[i.type]}
+            {i.hole ? ` · hole ${i.hole}` : ''}
+          </Text>
+          <Text style={styles.muted}>
+            {i.caddieName} · {clockTime(i.createdAt)}{' '}
+            {new Date(i.createdAt).toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' })}
+          </Text>
+          {i.message && <Text style={styles.date}>{i.message}</Text>}
+          <View style={styles.actions}>
+            <Button label="Resolved" onPress={() => resolve(i.id)} loading={busyIssue === i.id} />
+          </View>
+        </View>
+      ))}
 
       <Text style={styles.heading}>Not coming in - waiting ({inbox?.pending.length ?? 0})</Text>
       {inbox && inbox.pending.length === 0 && <Text style={styles.muted}>Nothing waiting.</Text>}
@@ -58,6 +96,8 @@ export default function InboxScreen() {
           </Text>
         </View>
       ))}
+
+      <IssueHistory refreshKey={resolvedCount} />
     </Screen>
   );
 }
@@ -73,6 +113,7 @@ const styles = StyleSheet.create({
     padding: 14,
     gap: 6,
   },
+  issue: { borderLeftWidth: 4, borderLeftColor: colors.danger },
   decided: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   name: { fontSize: 16, fontWeight: '600', color: colors.text },
   date: { fontSize: 15, color: colors.text },

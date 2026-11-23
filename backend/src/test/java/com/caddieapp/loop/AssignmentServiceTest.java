@@ -26,6 +26,7 @@ import com.caddieapp.audit.AuditLog;
 import com.caddieapp.availability.QueueEntry;
 import com.caddieapp.availability.QueueEntryRepository;
 import com.caddieapp.caddie.Caddie;
+import com.caddieapp.caddie.CaddieRepository;
 import com.caddieapp.caddie.User;
 import com.caddieapp.caddie.UserRepository;
 import com.caddieapp.common.ApiException;
@@ -45,9 +46,11 @@ class AssignmentServiceTest {
     private final QueueEntryRepository entries = mock(QueueEntryRepository.class);
     private final LoopRepository loops = mock(LoopRepository.class);
     private final UserRepository users = mock(UserRepository.class);
+    private final CaddieRepository caddies = mock(CaddieRepository.class);
     private final AuditLog audit = mock(AuditLog.class);
     private final NotificationService notifications = mock(NotificationService.class);
-    private final AssignmentService service = new AssignmentService(entries, loops, users, audit, notifications, clock);
+    private final AssignmentService service = new AssignmentService(entries, loops, users, caddies, audit, notifications,
+        clock);
 
     private QueueEntry entry;
 
@@ -118,7 +121,7 @@ class AssignmentServiceTest {
         service.call(1, 7, BagType.SINGLE);
         service.sendOut(1, 7);
         Loop out = new Loop(entry.getCaddie(), today, BagType.SINGLE, null, null, null);
-        when(loops.findFirstByCaddieIdAndDateAndReturnedAtIsNullOrderByIdDesc(7L, today)).thenReturn(Optional.of(out));
+        when(loops.findFirstByCaddieIdAndDateAndSentOutAtIsNotNullAndReturnedAtIsNullOrderByIdDesc(7L, today)).thenReturn(Optional.of(out));
 
         service.backIn(null, 7); // the caddie themselves
 
@@ -144,6 +147,45 @@ class AssignmentServiceTest {
         service.sendOut(1, 7);
 
         assertThatThrownBy(() -> service.moveInLine(1, 7, 1, null)).isInstanceOf(ApiException.class);
+    }
+
+    @Test
+    void doubleLoopCountsTwiceAndIsAudited() {
+        Loop single = new Loop(entry.getCaddie(), today, BagType.SINGLE, null, null, null);
+        Loop dbl = new Loop(entry.getCaddie(), today, BagType.DOUBLE, null, null, null);
+        when(loops.findById(41L)).thenReturn(Optional.of(single));
+        when(loops.findById(42L)).thenReturn(Optional.of(dbl));
+
+        service.markDoubleLoop(1, 41, true);
+        service.markDoubleLoop(1, 42, true);
+
+        assertThat(single.bags()).isEqualTo(2);
+        assertThat(dbl.bags()).isEqualTo(4);
+        verify(audit, org.mockito.Mockito.times(2)).record(eq(1L), eq("DOUBLE_LOOP"), any(), any());
+
+        service.markDoubleLoop(1, 41, false); // undo
+        assertThat(single.bags()).isEqualTo(1);
+    }
+
+    @Test
+    void bagEnteredByHandCountsButNeverShowsAsOutOnCourse() {
+        when(caddies.findById(7L)).thenReturn(Optional.of(entry.getCaddie()));
+
+        service.addBag(1, 7, today.minusDays(1), BagType.DOUBLE);
+
+        ArgumentCaptor<Loop> saved = ArgumentCaptor.forClass(Loop.class);
+        verify(loops).save(saved.capture());
+        assertThat(saved.getValue().getDate()).isEqualTo(today.minusDays(1));
+        assertThat(saved.getValue().getBagType()).isEqualTo(BagType.DOUBLE);
+        assertThat(saved.getValue().getSentOutAt()).isNull(); // "out on course" needs a sent-out time
+        verify(audit).record(eq(1L), eq("ADD_BAG"), any(), any());
+    }
+
+    @Test
+    void bagCannotBeEnteredForAFutureDay() {
+        assertThatThrownBy(() -> service.addBag(1, 7, today.plusDays(1), BagType.SINGLE))
+            .isInstanceOf(ApiException.class).hasMessageContaining("hasn't happened yet");
+        verify(loops, never()).save(any());
     }
 
     @Test

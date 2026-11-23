@@ -3,7 +3,6 @@ package com.caddieapp.caddie;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -24,6 +23,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import com.caddieapp.audit.AuditLog;
+import com.caddieapp.auth.SetupCodes;
 import com.caddieapp.caddie.CaddieDtos.CaddieWithSetupCode;
 import com.caddieapp.caddie.CaddieDtos.CreateCaddieRequest;
 import com.caddieapp.common.ApiException;
@@ -39,8 +39,8 @@ class CaddieServiceTest {
     private final PasswordEncoder encoder = new BCryptPasswordEncoder(4);
     private final AuditLog audit = mock(AuditLog.class);
     private final Clock clock = Clock.fixed(Instant.parse("2026-11-25T12:00:00Z"), ZoneId.of("Europe/Dublin"));
-    private final CaddieService service = new CaddieService(users, caddies, encoder, new QueueService(), audit,
-        clock, 48);
+    private final CaddieService service = new CaddieService(users, caddies, new SetupCodes(encoder, clock, 48),
+        new QueueService(), audit);
 
     /** Make the mocked save() behave like the database: hand back the entity with an id. */
     private void saveAssignsIds() {
@@ -88,46 +88,52 @@ class CaddieServiceTest {
         assertThat(encoder.matches(result.setupCode(), saved.getPasswordHash())).isTrue();
     }
 
-    /** A list of 120: 50 priority, 62 other adults, 8 juniors (113-120). */
-    private void listOf120() {
-        when(caddies.countByPriorityTrue()).thenReturn(50L);
-        when(caddies.countByGradeNot(Grade.JUNIOR)).thenReturn(112L);
-        when(caddies.findMaxListPosition()).thenReturn(120);
+    /** A list of 120: 50 priority (1-50), 62 other adults (51-112), 8 juniors (113-120). */
+    private List<Caddie> listOf120() {
+        List<Caddie> list = new java.util.ArrayList<>();
+        for (int position = 1; position <= 120; position++) {
+            Grade grade = position > 112 ? Grade.JUNIOR : Grade.SINGLE;
+            list.add(listed(1000 + position, grade, position <= 50, position));
+        }
+        when(caddies.findClubListForUpdate()).thenReturn(list);
+        return list;
     }
 
     @Test
     void newCaddieGoesToTopOfNonPriorityGroupAndOthersShiftDown() {
         saveAssignsIds();
-        listOf120();
+        List<Caddie> list = listOf120();
 
         CaddieWithSetupCode result = service.create(request("0871234567", Grade.SINGLE, false, null));
 
         assertThat(result.caddie().listPosition()).isEqualTo(51);
-        verify(caddies).shiftDownFrom(51);
+        assertThat(list.get(50).getListPosition()).isEqualTo(52); // the old 51 moved down one
+        assertThat(list.get(49).getListPosition()).isEqualTo(50); // priority caddies untouched
     }
 
     @Test
     void paperListAdultGoesAboveTheJuniors() {
         saveAssignsIds();
-        listOf120();
+        List<Caddie> list = listOf120();
 
         CaddieWithSetupCode result = service.create(
             request("0871234567", Grade.SINGLE, false, Placement.BOTTOM_OF_GROUP));
 
         assertThat(result.caddie().listPosition()).isEqualTo(113);
-        verify(caddies).shiftDownFrom(113);
+        assertThat(list.get(112).getListPosition()).isEqualTo(114); // first junior moved down one
     }
 
     @Test
     void paperListJuniorAddsAtTheVeryBottomWithoutShifting() {
         saveAssignsIds();
-        listOf120();
+        List<Caddie> list = listOf120();
 
         CaddieWithSetupCode result = service.create(
             request("0871234567", Grade.JUNIOR, false, Placement.BOTTOM_OF_GROUP));
 
         assertThat(result.caddie().listPosition()).isEqualTo(121);
-        verify(caddies, never()).shiftDownFrom(anyInt());
+        assertThat(list).extracting(Caddie::getListPosition).containsExactlyElementsOf(
+            java.util.stream.IntStream.rangeClosed(1, 120).boxed().toList()); // nobody moved
     }
 
     @Test
@@ -204,7 +210,7 @@ class CaddieServiceTest {
         Caddie a2 = listed(3, Grade.DOUBLE, false, 3);
         Caddie a3 = listed(4, Grade.SINGLE, false, 4);
         Caddie j1 = listed(5, Grade.JUNIOR, false, 5);
-        when(caddies.findClubList()).thenReturn(List.of(p1, a1, a2, a3, j1));
+        when(caddies.findClubListForUpdate()).thenReturn(List.of(p1, a1, a2, a3, j1));
 
         service.moveInClubList(99, 4, 2); // a3 from 4 up to 2
 
@@ -218,11 +224,92 @@ class CaddieServiceTest {
         Caddie p1 = listed(1, Grade.SINGLE, true, 1);
         Caddie a1 = listed(2, Grade.SINGLE, false, 2);
         Caddie j1 = listed(3, Grade.JUNIOR, false, 3);
-        when(caddies.findClubList()).thenReturn(List.of(p1, a1, j1));
+        when(caddies.findClubListForUpdate()).thenReturn(List.of(p1, a1, j1));
 
         assertThatThrownBy(() -> service.moveInClubList(99, 3, 2))
             .isInstanceOf(ApiException.class).hasMessageContaining("juniors");
         assertThatThrownBy(() -> service.moveInClubList(99, 2, 1))
             .isInstanceOf(ApiException.class).hasMessageContaining("between 2 and 2");
+    }
+
+    // ---- Editing, promote / demote, leaving ----
+
+    private static CaddieDtos.EditCaddieRequest edit(Caddie c, Grade grade, boolean priority) {
+        return new CaddieDtos.EditCaddieRequest(c.getUser().getName(), c.getUser().getPhone(), grade, priority);
+    }
+
+    @Test
+    void promotedCaddieGoesToTopOfPriorityGroupAndIsAudited() {
+        Caddie p1 = listed(1, Grade.SINGLE, true, 1);
+        Caddie a1 = listed(2, Grade.SINGLE, false, 2);
+        Caddie a2 = listed(3, Grade.DOUBLE, false, 3);
+        Caddie j1 = listed(4, Grade.JUNIOR, false, 4);
+        when(caddies.findById(3L)).thenReturn(Optional.of(a2));
+        when(caddies.findClubListForUpdate()).thenReturn(List.of(p1, a1, a2, j1));
+
+        service.edit(99, 3, edit(a2, Grade.DOUBLE, true));
+
+        assertThat(List.of(a2, p1, a1, j1)).extracting(Caddie::getListPosition).containsExactly(1, 2, 3, 4);
+        verify(audit).record(org.mockito.ArgumentMatchers.eq(99L), org.mockito.ArgumentMatchers.eq("EDIT_CADDIE"),
+            any(), any());
+    }
+
+    @Test
+    void juniorBecomingAnAdultGoesToTopOfNonPriorityAdults() {
+        Caddie p1 = listed(1, Grade.SINGLE, true, 1);
+        Caddie a1 = listed(2, Grade.SINGLE, false, 2);
+        Caddie j1 = listed(3, Grade.JUNIOR, false, 3);
+        Caddie j2 = listed(4, Grade.JUNIOR, false, 4);
+        when(caddies.findById(4L)).thenReturn(Optional.of(j2));
+        when(caddies.findClubListForUpdate()).thenReturn(List.of(p1, a1, j1, j2));
+
+        service.edit(99, 4, edit(j2, Grade.SINGLE, false));
+
+        assertThat(List.of(p1, j2, a1, j1)).extracting(Caddie::getListPosition).containsExactly(1, 2, 3, 4);
+    }
+
+    @Test
+    void renameWithoutChangingGroupKeepsTheirPlace() {
+        Caddie p1 = listed(1, Grade.SINGLE, true, 1);
+        Caddie a1 = listed(2, Grade.SINGLE, false, 2);
+        when(caddies.findById(2L)).thenReturn(Optional.of(a1));
+
+        service.edit(99, 2, new CaddieDtos.EditCaddieRequest("New Name", "086 000 0002", Grade.DOUBLE, false));
+
+        assertThat(a1.getUser().getName()).isEqualTo("New Name");
+        assertThat(a1.getListPosition()).isEqualTo(2);
+        verify(caddies, never()).findClubList();
+    }
+
+    @Test
+    void leaverIsTakenOffTheListAndLoggedOut() {
+        Caddie a1 = listed(1, Grade.SINGLE, false, 1);
+        Caddie a2 = listed(2, Grade.SINGLE, false, 2);
+        Caddie a3 = listed(3, Grade.SINGLE, false, 3);
+        int tokenVersion = a2.getUser().getTokenVersion();
+        when(caddies.findById(2L)).thenReturn(Optional.of(a2));
+        when(caddies.findClubListForUpdate()).thenReturn(List.of(a1, a2, a3));
+
+        service.markLeft(99, 2);
+
+        assertThat(a2.getUser().isActive()).isFalse();
+        assertThat(a2.getUser().getTokenVersion()).isEqualTo(tokenVersion + 1);
+        assertThat(a2.getListPosition()).isZero();
+        assertThat(List.of(a1, a3)).extracting(Caddie::getListPosition).containsExactly(1, 2);
+    }
+
+    @Test
+    void caddieBroughtBackGoesToTopOfTheirGroup() {
+        Caddie p1 = listed(1, Grade.SINGLE, true, 1);
+        Caddie a1 = listed(2, Grade.SINGLE, false, 2);
+        Caddie back = listed(3, Grade.DOUBLE, false, 0);
+        back.getUser().markLeft();
+        when(caddies.findById(3L)).thenReturn(Optional.of(back));
+        when(caddies.findClubListForUpdate()).thenReturn(List.of(p1, a1));
+
+        service.bringBack(99, 3);
+
+        assertThat(back.getUser().isActive()).isTrue();
+        assertThat(List.of(p1, back, a1)).extracting(Caddie::getListPosition).containsExactly(1, 2, 3);
     }
 }

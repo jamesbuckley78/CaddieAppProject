@@ -39,6 +39,10 @@ public class User {
     @Column(nullable = false, length = 10)
     private Role role;
 
+    /** False once they've left the club: can't log in, off the club list. History is kept. */
+    @Column(nullable = false)
+    private boolean active = true;
+
     /** BCrypt hash of the password, or of the one-time setup code until the user sets one. */
     @Column(name = "password_hash", length = 100)
     private String passwordHash;
@@ -90,6 +94,29 @@ public class User {
 
     public Role getRole() {
         return role;
+    }
+
+    public boolean isActive() {
+        return active;
+    }
+
+    /** Admin corrects their name or phone number (phone already normalised). */
+    public void changeDetails(String name, String phone) {
+        this.name = name;
+        this.phone = phone;
+    }
+
+    /** Left the club: logs them out everywhere and stops push notifications to their phone. */
+    public void markLeft() {
+        this.active = false;
+        this.tokenVersion++;
+        this.pushToken = null;
+        this.pushProvider = null;
+    }
+
+    /** Back at the club: their old password works again. */
+    public void markReturned() {
+        this.active = true;
     }
 
     public String getPasswordHash() {

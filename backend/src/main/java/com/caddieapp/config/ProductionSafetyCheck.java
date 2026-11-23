@@ -11,7 +11,8 @@ import org.springframework.stereotype.Component;
 
 /**
  * Refuses to start in production (app.environment=production) while any development default is
- * still set: the dev JWT secret, the default admin password, or the GPS check switched off.
+ * still set: the dev JWT secret, the default admin password, the GPS check switched off, or a
+ * CORS list with only localhost in it (the hosted admin board couldn't reach the API).
  * Locally (the default, "development") it does nothing.
  */
 @Component
@@ -25,15 +26,18 @@ public class ProductionSafetyCheck implements ApplicationRunner {
     private final String jwtSecret;
     private final String adminPassword;
     private final boolean requireLocation;
+    private final List<String> corsOrigins;
 
     public ProductionSafetyCheck(@Value("${app.environment}") String environment,
                                  @Value("${app.jwt.secret}") String jwtSecret,
                                  @Value("${app.bootstrap-admin.password}") String adminPassword,
-                                 @Value("${app.check-in.require-location}") boolean requireLocation) {
+                                 @Value("${app.check-in.require-location}") boolean requireLocation,
+                                 @Value("${app.cors.allowed-origins}") List<String> corsOrigins) {
         this.environment = environment;
         this.jwtSecret = jwtSecret;
         this.adminPassword = adminPassword;
         this.requireLocation = requireLocation;
+        this.corsOrigins = corsOrigins;
     }
 
     @Override
@@ -50,6 +54,9 @@ public class ProductionSafetyCheck implements ApplicationRunner {
         }
         if (!requireLocation) {
             problems.add("CHECKIN_REQUIRE_LOCATION is false - anyone could check in from home");
+        }
+        if (corsOrigins.stream().allMatch(o -> o.contains("localhost") || o.contains("127.0.0.1"))) {
+            problems.add("CORS_ALLOWED_ORIGINS only allows localhost - set it to the admin site's address");
         }
         if (!problems.isEmpty()) {
             throw new IllegalStateException("Not safe to run in production: " + String.join("; ", problems));

@@ -44,6 +44,10 @@ public class Loop {
     @Column(name = "bag_type", nullable = false, length = 10)
     private BagType bagType;
 
+    /** Went round twice (36 holes) on this bag. Marked by the admin; counts the bag twice. */
+    @Column(name = "double_loop", nullable = false)
+    private boolean doubleLoop;
+
     @Column(name = "tee_time")
     private LocalTime teeTime;
 
@@ -107,8 +111,21 @@ public class Loop {
         return returnedAt;
     }
 
+    public boolean isDoubleLoop() {
+        return doubleLoop;
+    }
+
+    /** Bags this loop counts as: a double is 2, and a double loop counts twice (so up to 4). */
+    public int bags() {
+        return bagType.bags() * (doubleLoop ? 2 : 1);
+    }
+
     public void changeBagType(BagType bagType) {
         this.bagType = bagType;
+    }
+
+    public void markDoubleLoop(boolean doubleLoop) {
+        this.doubleLoop = doubleLoop;
     }
 
     public void markReturned(LocalDateTime at) {

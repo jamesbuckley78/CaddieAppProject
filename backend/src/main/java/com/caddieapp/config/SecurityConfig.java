@@ -2,6 +2,7 @@ package com.caddieapp.config;
 
 import java.util.List;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpStatus;
@@ -39,7 +40,6 @@ public class SecurityConfig {
             .addFilterBefore(new JwtAuthFilter(jwtService, users), UsernamePasswordAuthenticationFilter.class)
             .authorizeHttpRequests(auth -> auth
                 // "/error" is Spring's error page; without it every error shows as a 401/403.
-                // /ws (live updates, not used yet) is no longer open: it needs a logged-in user.
                 .requestMatchers("/", "/error", "/api/health", "/api/auth/login").permitAll()
                 // set-password and me: any logged-in user, even one still on their setup code
                 .requestMatchers("/api/auth/**").authenticated()
@@ -55,11 +55,14 @@ public class SecurityConfig {
         return new BCryptPasswordEncoder();
     }
 
-    /** Lets the Expo web build (admin on a PC/tablet browser) call the API during development. */
+    /**
+     * Lets the Expo web build (admin on a PC/tablet browser) call the API: from localhost in
+     * development, from the real site's address (CORS_ALLOWED_ORIGINS) once it's hosted.
+     */
     @Bean
-    CorsConfigurationSource corsConfigurationSource() {
+    CorsConfigurationSource corsConfigurationSource(@Value("${app.cors.allowed-origins}") List<String> origins) {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOriginPatterns(List.of("http://localhost:*", "http://127.0.0.1:*"));
+        config.setAllowedOriginPatterns(origins);
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("Authorization", "Content-Type"));
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

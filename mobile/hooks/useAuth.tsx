@@ -4,6 +4,7 @@ import * as authApi from '@/api/auth';
 import { ApiError, setAuthToken, setOnLoggedOut } from '@/api/client';
 import { registerForPushNotifications } from '@/api/push';
 import { clearSession, loadSession, saveSession } from '@/api/sessionStorage';
+import { clearBoardCopy } from '@/components/boardBackup';
 import type { LoginResponse, User } from '@/types';
 
 // "Context" shares one value with every screen without passing it down by hand.
@@ -36,6 +37,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function signOut() {
     setAuthToken(null);
     await clearSession();
+    clearBoardCopy();
     setUser(null);
     setStatus('signedOut');
   }
@@ -70,9 +72,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(saved.user);
       setStatus('signedIn');
       try {
-        const fresh = await authApi.fetchMe();
-        setUser(fresh);
-        await saveSession({ token: saved.token, user: fresh });
+        // Caddies get a fresh 90-day token each time the app starts; admins keep their 12 hours
+        const fresh =
+          saved.user.role === 'CADDIE'
+            ? await authApi.renewLogin()
+            : { token: saved.token, user: await authApi.fetchMe() };
+        setAuthToken(fresh.token);
+        setUser(fresh.user);
+        await saveSession(fresh);
       } catch (e) {
         // `instanceof` works like Java's: is this error one of ours, with a status?
         if (e instanceof ApiError && e.status === 401) {

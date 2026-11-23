@@ -36,6 +36,7 @@ export default function HistoryScreen() {
               <Text style={styles.loopDay}>{dayLabel(loop.date)}</Text>
               <Text style={[styles.bag, loop.bagType === 'DOUBLE' && styles.double]}>
                 {loop.bagType === 'DOUBLE' ? 'Double' : 'Single'}
+                {loop.doubleLoop ? ' · double loop' : ''}
               </Text>
               <Text style={styles.muted}>
                 {loop.sentOutAt ? `out ${clockTime(loop.sentOutAt)}` : ''}

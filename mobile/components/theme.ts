@@ -12,9 +12,9 @@ export const colors = {
   stripe: '#f0f2ee', // every other table row
 };
 
-/** Name tags on the club list: P = priority, S = single, D = double, J = junior. */
+/** Name tags (app and printed list): P = priority red, S = single blue, D = double orange, J = junior grey. */
 export const tagColors = {
-  P: '#1f6f43',
+  P: '#c62828',
   S: '#1d5fa8',
   D: '#b25a00',
   J: '#6b6b6b',

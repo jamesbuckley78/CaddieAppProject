@@ -26,6 +26,11 @@ export function moveInLine(caddieId: number, lineNumber: number | null) {
   return api.post<Board>(`/admin/board/${caddieId}/move`, { lineNumber });
 }
 
+/** Round twice on the same bag: counts twice. false undoes it. */
+export function markDoubleLoop(loopId: number, doubleLoop: boolean) {
+  return api.post<Board>(`/admin/loops/${loopId}/double-loop`, { doubleLoop });
+}
+
 export function changeBagType(loopId: number, bagType: BagType) {
   return api.post<Board>(`/admin/loops/${loopId}/bag-type`, { bagType });
 }

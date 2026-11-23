@@ -25,6 +25,6 @@ public interface QueueEntryRepository extends JpaRepository<QueueEntry, Long> {
     Optional<QueueEntry> findForUpdate(@Param("date") LocalDate date, @Param("caddieId") Long caddieId);
 
     /** Everyone who checked in on a day, with caddie and user loaded in one query. */
-    @Query("select q from QueueEntry q join fetch q.caddie c join fetch c.user where q.date = :date")
+    @Query("select q from QueueEntry q join fetch q.caddie c join fetch c.user u where q.date = :date and u.active = true")
     List<QueueEntry> findDay(@Param("date") LocalDate date);
 }

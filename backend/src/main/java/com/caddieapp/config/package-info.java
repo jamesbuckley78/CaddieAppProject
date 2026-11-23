@@ -1,4 +1,4 @@
 /**
- * Spring configuration: security, WebSocket, CORS and other app-wide settings.
+ * Spring configuration: security, CORS and other app-wide settings.
  */
 package com.caddieapp.config;

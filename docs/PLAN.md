@@ -70,7 +70,7 @@ CaddieAppProject/
 ├── .env.example
 ├── docs/        PLAN.md, RULES.md, API.md
 ├── backend/     Spring Boot: config, auth, caddie, availability, queue, loop,
-│                absence, issue, notification, audit, realtime; Flyway in resources/db/migration
+│                absence, issue, notification, audit; Flyway in resources/db/migration
 └── mobile/      Expo: app/login.tsx, app/(caddie)/..., app/(admin)/...,
                  components/, api/, hooks/, types/
 ```
@@ -78,8 +78,10 @@ CaddieAppProject/
 ## Next step
 Done: skeleton, login, GPS "I'm here" check-in with statuses, the daily (4pm) club list, today's line, the admin board with calling / sending out / back in / no reply (row-locked, audit logged), manual moves, "not coming in" with the admin Inbox, caddie history, push notification code, and the security fixes (login lock-out, expiring setup codes, cancellable logins, 12 h admin logins, production safety check).
 
+Also done: more admins (Admins tab), editing caddies / promote / demote / mark as left, bags entered by hand, issue reports (banner on the board + Inbox), attendance week view (totals and list), the board's saved copy and Print button (web), push tokens follow the phone, caddie logins renewed on every app start.
+
 Next, before real caddies use it:
 1. Fill in the club's GPS coordinates and switch `require-location` on.
 2. `eas init` + an EAS development build on a real phone, to test push notifications (they don't work in Expo Go or the web).
-3. Hosting: a server with HTTPS, real secrets in environment variables, `APP_ENVIRONMENT=production`.
-Then: attendance views, issue reports, SMS fallback, QR check-in.
+3. Hosting: a server with HTTPS, real secrets in environment variables, `CORS_ALLOWED_ORIGINS` set to the admin site's address, `APP_ENVIRONMENT=production`.
+Then, only if needed: attendance calendar view, SMS fallback, QR check-in.

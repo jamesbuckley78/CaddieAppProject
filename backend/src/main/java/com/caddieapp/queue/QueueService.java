@@ -83,6 +83,24 @@ public class QueueService {
     }
 
     /**
+     * Everyone in one list, for the printed list (docs/RULES.md, "Printed list"): the waiting line
+     * as it stands (manual moves included), with each caddie out on course slotted in where the
+     * rules expect them once they're back - just before the first waiting caddie the rules put
+     * after them. Their `bags` already include the bag they're carrying.
+     */
+    public List<Candidate> withOutOnCourse(List<Candidate> waitingLine, Collection<Candidate> outOnCourse) {
+        List<Candidate> result = new ArrayList<>(waitingLine);
+        outOnCourse.stream().sorted(ORDER).forEach(out -> {
+            int index = 0;
+            while (index < result.size() && ORDER.compare(result.get(index), out) < 0) {
+                index++;
+            }
+            result.add(index, out);
+        });
+        return result;
+    }
+
+    /**
      * Numbers the people in line 1, 2, 3... skipping anyone `notInLine` says to skip (out on
      * course). Skipped caddies get no number. Keeps the order of `line`.
      */

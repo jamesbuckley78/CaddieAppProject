@@ -1,5 +1,6 @@
 import { Redirect, Tabs } from 'expo-router';
 
+import { ClubCrest } from '@/components/branding';
 import { SignOutButton } from '@/components/SignOutButton';
 import { colors } from '@/components/theme';
 import { useAuth } from '@/hooks/useAuth';
@@ -17,6 +18,7 @@ export default function AdminLayout() {
   return (
     <Tabs
       screenOptions={{
+        headerLeft: () => <ClubCrest />,
         headerRight: () => <SignOutButton />,
         tabBarActiveTintColor: colors.primary,
         tabBarIconStyle: { display: 'none' }, // no icons yet - hides the placeholder arrows
@@ -26,6 +28,7 @@ export default function AdminLayout() {
       <Tabs.Screen name="caddies" options={{ title: 'Caddies' }} />
       <Tabs.Screen name="inbox" options={{ title: 'Inbox' }} />
       <Tabs.Screen name="attendance" options={{ title: 'Attendance' }} />
+      <Tabs.Screen name="admins" options={{ title: 'Admins' }} />
     </Tabs>
   );
 }

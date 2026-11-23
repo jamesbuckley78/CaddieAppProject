@@ -11,7 +11,7 @@ An app to track when caddies are available to work, replacing the golf club's ma
 | `docker-compose.yml` | Local MySQL database | Docker Desktop |
 
 ### Backend (`backend/src/main/java/com/caddieapp/`)
-One package per feature: `auth`, `caddie`, `availability`, `queue`, `loop`, `absence`, `issue`, `notification`, `audit`, `realtime`, plus `config` and `common`. Each has a `package-info.java` saying what belongs in it.
+One package per feature: `auth`, `caddie`, `availability`, `queue`, `loop`, `absence`, `issue`, `notification`, `audit`, plus `config` and `common`. Each has a `package-info.java` saying what belongs in it.
 Database changes go in `backend/src/main/resources/db/migration/` as new `V2__...sql`, `V3__...sql` files.
 
 ### Mobile (`mobile/`)
@@ -46,9 +46,13 @@ Database changes go in `backend/src/main/resources/db/migration/` as new `V2__..
 ## Using it
 - **Caddie - Today:** "I'm here", then Available / Getting food / Will be back / Finished for today. When called: "You're up!" -> **On my way**. After a loop: **Back in**.
 - **Caddie - Club list, Not coming in, History** tabs: the club table, absence requests (24 h notice), and their own loops and days worked.
-- **Admin - Board:** tap a name for its buttons: **Call - single/double**, **Move to number**, then **Sent out** / **No reply**, and for someone out on course **Back in** / **Was a double/single**. On a phone, switch between Singles / Doubles / Out on course; each shows 15 at a time.
-- **Admin - Caddies:** add caddies, tap one to move them on the club list (within their group) or give a new setup code.
-- **Admin - Inbox:** approve or reject "not coming in" requests.
+- **Admin - Board:** tap a name for its buttons: **Call - single/double**, **Move to number**, then **Sent out** / **No reply**, and for someone out on course **Back in** / **Was a double/single** / **Double loop** (counts the bag twice). On a phone, switch between Singles / Doubles / Out on course; each shows 15 at a time.
+- **Admin - Board:** also shows a red banner when caddies have reported issues, and (in a browser) a **Print preview** button that opens the printable list with its own Print button. If the server can't be reached after a reload, it shows the last saved list so it can still be printed.
+- **Admin - Caddies:** add caddies; tap one to move them on the club list (within their group), edit details / grade / priority, add a bag by hand, give a new setup code or mark them as left. Leavers are listed at the bottom with **Bring back**.
+- **Admin - Inbox:** issue reports to mark resolved, "not coming in" requests to approve or reject, and the **Issue history** by week or all time: totals per type, which caddies report the most, and who resolved each one.
+- **Admin - Attendance:** who came in each day of a week, with check-in times and totals.
+- **Admin - Admins:** add another caddie master, give one a new setup code (forgotten password) or remove one who has left.
+- **Caddie - Report issue:** slow play, ranger, golfer problem, golfer wants to go in, missing item, with an optional hole and note.
 
 ## Push notifications
 The backend sends an Expo push notification when a caddie is called. Push only works in a real installed build on a phone - not in Expo Go, the emulator or the web, where the caddie still sees the call on their Today screen within 10 seconds. To try it: `npx eas init` (adds the project id to `app.json`), then an EAS development build on an Android phone.
@@ -71,4 +75,4 @@ Demo caddies can't log in. Never run this against the real club database.
 3. Set `require-location` to `true`. It's `false` for now so you can test from home.
 
 ## Forgotten admin password
-Only a BCrypt hash is stored, so it can't be read back. It has to be replaced in the `users` table with a new hash (and `must_change_password = 1`). The account can't simply be deleted once it has done anything, because the audit log refers to it.
+Another admin gives them a new setup code on the **Admins** tab. If the only admin is locked out, the password has to be replaced in the `users` table with a new BCrypt hash (and `must_change_password = 1`), since only the hash is stored.

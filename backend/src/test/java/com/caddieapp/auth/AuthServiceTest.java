@@ -46,6 +46,24 @@ class AuthServiceTest {
     }
 
     @Test
+    void caddieWhoLeftCannotLogIn() {
+        savedUser("secret1", false).markLeft();
+
+        assertThatThrownBy(() -> authService.login("0871234567", "secret1"))
+            .isInstanceOf(ApiException.class).hasMessage(AuthService.BAD_LOGIN);
+    }
+
+    @Test
+    void caddieLoginIsRenewedButAdminsKeepTheir12Hours() {
+        savedUser("secret1", false);
+        assertThat(jwtService.parse(authService.renew(1).token())).isPresent();
+
+        User admin = TestUsers.user(2, Role.ADMIN, "hash", false);
+        when(users.findById(2L)).thenReturn(Optional.of(admin));
+        assertThatThrownBy(() -> authService.renew(2)).isInstanceOf(ApiException.class);
+    }
+
+    @Test
     void correctPasswordLogsIn() {
         savedUser("secret1", false);
 
